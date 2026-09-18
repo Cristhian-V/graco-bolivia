@@ -1,0 +1,80 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "timezone=${TZ:-America/La_Paz}"]
+    environment:
+      POSTGRES_USER: prm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es requerido}
+      POSTGRES_DB: prm
+      TZ: ${TZ:-America/La_Paz}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: prm
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es requerido}
+      PGDATABASE: prm
+      PORT: 3000
+      TZ: ${TZ:-America/La_Paz}
+      SUMA_USUARIO: ${SUMA_USUARIO}
+      SUMA_PASSWORD: ${SUMA_PASSWORD}
+      SUMA_BASE_URL: ${SUMA_BASE_URL:-https://suma.aduana.gob.bo}
+      SUMA_SERVICIOS_URL: ${SUMA_SERVICIOS_URL:-https://servicios.aduana.gob.bo}
+      SUMA_DECLARANTE_NIT: ${SUMA_DECLARANTE_NIT:-1015517026}
+      PRM_FECHA_DESDE: ${PRM_FECHA_DESDE:-2026-01-01}
+      SCHEDULER_CRON: ${SCHEDULER_CRON:-0 15 * * *}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SQL_DIR: /app/sql
+      DOWNLOADS_DIR: /app/downloads
+      DOCUMENTOS_DESPACHO_DIR: /app/documentos-despacho
+      # SUMA presenta cadena TLS incompleta (intermedia no encadenada);
+      # se desactiva la verificación para poder conectar.
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    volumes:
+      - ./db/init:/app/sql:ro
+      - downloads:/app/downloads
+      - documentos-despacho:/app/documentos-despacho
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  dbdata:
+  downloads:
+  documentos-despacho:
+  caddy-data:
+  caddy-config:

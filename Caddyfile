@@ -1,0 +1,8 @@
+{
+	# email para avisos de Let's Encrypt (opcional)
+	# email admin@import-graco-bolivia.digital
+}
+
+import-graco-bolivia.digital {
+	reverse_proxy frontend:80
+}

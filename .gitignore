@@ -1,0 +1,16 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (credenciales)
+.env
+
+# Builds
+frontend/dist/
+backend/dist/
+
+# Logs / temporales
+*.log
+
+# Artefactos locales de prueba
+combustibles_export.xlsx
+descargas/
