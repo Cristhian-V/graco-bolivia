@@ -84,6 +84,19 @@ export const getDashboardData = (params) => {
   return getJSON(`/dashboard/data${s ? `?${s}` : ''}`);
 };
 
+export const getMarcadores = () => getJSON('/dashboard/marcadores');
+export const putMarcadores = (grafico, valores) => {
+  return fetch(`${BASE}/dashboard/marcadores/${grafico}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ valores }),
+  }).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    return data;
+  });
+};
+
 export const getPrecioMarcador = () => getJSON('/precio-marcador');
 export const previewPrecioMarcador = (file) => postFile('/precio-marcador/preview', file);
 export const procesarPrecioMarcador = (registros) =>

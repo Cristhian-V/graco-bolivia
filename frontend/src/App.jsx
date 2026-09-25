@@ -76,7 +76,7 @@ function AduanasSection() {
   );
 }
 
-function ManifiestosSection() {
+function ManifiestosSection({ canWrite }) {
   const clientes = useData(getClientes);
   const [nit, setNit] = useState('');
   const manifiestos = useData(() => (nit ? getManifiestos(nit) : Promise.resolve([])), [nit]);
@@ -99,10 +99,12 @@ function ManifiestosSection() {
   return (
     <div className="card">
       <h2>Manifiestos</h2>
-      <div className="toolbar">
-        <button className="btn" onClick={procesar} disabled={running}>{running ? 'Procesando…' : 'Procesar Manifiestos'}</button>
-        {runMsg && <span className="run-msg">{runMsg}</span>}
-      </div>
+      {canWrite && (
+        <div className="toolbar">
+          <button className="btn" onClick={procesar} disabled={running}>{running ? 'Procesando…' : 'Procesar Manifiestos'}</button>
+          {runMsg && <span className="run-msg">{runMsg}</span>}
+        </div>
+      )}
       <select value={nit} onChange={(e) => setNit(e.target.value)}>
         <option value="">Seleccione un cliente…</option>
         {(clientes.data || []).map((c) => (
@@ -209,7 +211,7 @@ function DocsRow({ id }) {
   );
 }
 
-function CombustiblesSection() {
+function CombustiblesSection({ canWrite }) {
   const clientes = useData(getClientes);
   const [nit, setNit] = useState('');
   const [tab, setTab] = useState('historial');
@@ -336,8 +338,8 @@ function CombustiblesSection() {
             <option key={c.nit} value={c.nit}>{c.nombre} ({c.nit})</option>
           ))}
         </select>
-        <button className="btn" onClick={procesar} disabled={running}>{running ? 'Procesando…' : 'Procesar Combustibles'}</button>
-        <button className="btn" onClick={sincronizarTc} disabled={running}>Sincronizar T/C</button>
+        {canWrite && <button className="btn" onClick={procesar} disabled={running}>{running ? 'Procesando…' : 'Procesar Combustibles'}</button>}
+        {canWrite && <button className="btn" onClick={sincronizarTc} disabled={running}>Sincronizar T/C</button>}
         <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
         <button className="btn" onClick={refrescarMes} disabled={running}>Refrescar</button>
         <a className="btn" href={`/api/combustibles/export${mes ? `?mes=${mes}` : ''}`}>Descargar Excel</a>
@@ -391,8 +393,8 @@ function CombustiblesSection() {
                         })}
                         <td>
                           <button className="link" onClick={() => toggleDocs(c.id)}>Docs</button>{' '}
-                          <button className="link" onClick={() => editar(c)}>Editar</button>{' '}
-                          {tarifaAlta(c) && !tarifaRevisadaOk(c) && (
+                          {canWrite && <button className="link" onClick={() => editar(c)}>Editar</button>}{' '}
+                          {canWrite && tarifaAlta(c) && !tarifaRevisadaOk(c) && (
                             <button className="link" onClick={() => ignorar(c)}>Ignorar</button>
                           )}
                         </td>
@@ -452,7 +454,7 @@ function CombustiblesSection() {
   );
 }
 
-function TipoCambioSection() {
+function TipoCambioSection({ canWrite }) {
   const [refresh, setRefresh] = useState(0);
   const tc = useData(getTipoCambio, [refresh]);
   const [desde, setDesde] = useState('2026-06-01');
@@ -478,11 +480,13 @@ function TipoCambioSection() {
   return (
     <div className="card">
       <h2>Tipo de cambio (BCB)</h2>
-      <div className="toolbar">
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        <button className="btn" onClick={actualizar}>Actualizar</button>
-      </div>
+      {canWrite && (
+        <div className="toolbar">
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          <button className="btn" onClick={actualizar}>Actualizar</button>
+        </div>
+      )}
       {msg && <p className="ok">{msg}</p>}
       {err && <p className="error">{err}</p>}
       {tc.loading && <p className="empty">Cargando…</p>}
@@ -585,17 +589,17 @@ function ReferenciasSection() {
 }
 
 const SECTIONS = [
-  { id: 'aduanas', label: 'Aduanas', rol: 'admin' },
-  { id: 'manifiestos', label: 'Manifiestos', rol: 'admin' },
-  { id: 'combustibles', label: 'Combustibles', rol: 'admin' },
-  { id: 'presentacion', label: 'Presentación', rol: null },
-  { id: 'precio-marcador', label: 'Precio Marcador', rol: null },
-  { id: 'tipo-cambio', label: 'Tipo de cambio', rol: 'admin' },
-  { id: 'referencias', label: 'Referencias', rol: 'admin' },
-  { id: 'usuarios', label: 'Usuarios', rol: 'admin' },
+  { id: 'aduanas', label: 'Aduanas', roles: ['admin'] },
+  { id: 'manifiestos', label: 'Manifiestos', roles: ['admin', 'presentacion'] },
+  { id: 'combustibles', label: 'Combustibles', roles: ['admin', 'presentacion'] },
+  { id: 'presentacion', label: 'Presentación', roles: ['admin', 'presentacion'] },
+  { id: 'precio-marcador', label: 'Precio Marcador', roles: ['admin', 'presentacion'] },
+  { id: 'tipo-cambio', label: 'Tipo de cambio', roles: ['admin', 'presentacion'] },
+  { id: 'referencias', label: 'Referencias', roles: ['admin'] },
+  { id: 'usuarios', label: 'Usuarios', roles: ['admin'] },
 ];
 
-function PrecioMarcadorSection() {
+function PrecioMarcadorSection({ canWrite }) {
   const [tab, setTab] = useState('cargar');
   const [refresh, setRefresh] = useState(0);
   const historial = useData(getPrecioMarcador, [refresh]);
@@ -674,6 +678,29 @@ function PrecioMarcadorSection() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!canWrite) {
+    return (
+      <div className="card">
+        <h2>Precio Marcador</h2>
+        {historial.loading && <p className="empty">Cargando…</p>}
+        {historial.error && <p className="error">{historial.error}</p>}
+        {!historial.loading && guardados === 0 && <p className="empty">No hay registros.</p>}
+        {guardados > 0 && (
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Fecha</th><th>Precio</th><th>Origen</th></tr></thead>
+              <tbody>
+                {historial.data.map((r) => (
+                  <tr key={r.fecha}><td>{r.fecha}</td><td>{r.precio}</td><td>{r.origen}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -891,7 +918,7 @@ function UsuariosSection() {
 
 export default function App() {
   const [auth, setAuth] = useState({ loading: true, user: null });
-  const [section, setSection] = useState('aduanas');
+  const [section, setSection] = useState('presentacion');
 
   useEffect(() => {
     getMe()
@@ -901,7 +928,7 @@ export default function App() {
 
   async function handleLogin(u) {
     setAuth({ loading: false, user: u });
-    setSection(u.rol === 'admin' ? 'aduanas' : 'presentacion');
+    setSection('presentacion');
   }
 
   async function handleLogout() {
@@ -911,7 +938,7 @@ export default function App() {
       // ignora errores de red al cerrar sesión
     }
     setAuth({ loading: false, user: null });
-    setSection('aduanas');
+    setSection('presentacion');
   }
 
   if (auth.loading) {
@@ -921,7 +948,8 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  const visible = SECTIONS.filter((s) => !s.rol || s.rol === auth.user.rol);
+  const visible = SECTIONS.filter((s) => s.roles.includes(auth.user.rol));
+  const canWrite = auth.user.rol === 'admin';
 
   return (
     <div className="layout">
@@ -945,11 +973,11 @@ export default function App() {
       </aside>
       <main className="content">
         {section === 'aduanas' && <AduanasSection />}
-        {section === 'manifiestos' && <ManifiestosSection />}
-        {section === 'combustibles' && <CombustiblesSection />}
-        {section === 'presentacion' && <DashboardSection />}
-        {section === 'precio-marcador' && <PrecioMarcadorSection />}
-        {section === 'tipo-cambio' && <TipoCambioSection />}
+        {section === 'manifiestos' && <ManifiestosSection canWrite={canWrite} />}
+        {section === 'combustibles' && <CombustiblesSection canWrite={canWrite} />}
+        {section === 'presentacion' && <DashboardSection canWrite={canWrite} />}
+        {section === 'precio-marcador' && <PrecioMarcadorSection canWrite={canWrite} />}
+        {section === 'tipo-cambio' && <TipoCambioSection canWrite={canWrite} />}
         {section === 'referencias' && <ReferenciasSection />}
         {section === 'usuarios' && <UsuariosSection />}
       </main>

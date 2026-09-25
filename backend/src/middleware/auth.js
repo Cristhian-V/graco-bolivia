@@ -34,14 +34,27 @@ export function requireAdmin(req, res, next) {
   return next();
 }
 
+// Lecturas permitidas al rol presentacion (ademas de admin).
+function lecturaPermitida(method, p) {
+  if (method !== 'GET') return false;
+  return p === '/clientes'
+    || p.startsWith('/dashboard')
+    || p.startsWith('/manifiestos')
+    || p.startsWith('/combustibles')
+    || p.startsWith('/tipo-cambio')
+    || p.startsWith('/precio-marcador');
+}
+
 // Guardia general de /api:
-// - POST /auth/login es público.
-// - El resto exige sesión; /auth/* y /dashboard/* para cualquier rol,
-//   y todo lo demás solo para admin.
+// - POST /auth/login es publico.
+// - El resto exige sesion. admin accede a todo; presentacion solo a las
+//   lecturas (GET) permitidas y a /auth/*.
 export function guardApi(req, res, next) {
   if (req.path === '/auth/login') return next();
   return requireAuth(req, res, () => {
-    if (req.path.startsWith('/auth') || req.path.startsWith('/dashboard')) return next();
+    if (req.path.startsWith('/auth')) return next();
+    if (req.user.rol === 'admin') return next();
+    if (lecturaPermitida(req.method, req.path)) return next();
     return requireAdmin(req, res, next);
   });
 }

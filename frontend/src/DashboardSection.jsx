@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { getDashboardData, getDashboardFilters, getDashboardKpis } from './api.js';
+import { getDashboardData, getDashboardFilters, getDashboardKpis, getMarcadores, putMarcadores } from './api.js';
 
 const SERIES = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#e11d48', '#a855f7', '#0ea5e9', '#d946ef'];
 
@@ -10,7 +10,7 @@ const MES_ABBR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep',
 
 function fmt(n, d = 0) {
   if (n == null || Number.isNaN(Number(n))) return '—';
-  return Number(n).toLocaleString('es-BO', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 function fmt$(n) { return `$ ${fmt(n, 2)}`; }
 function sl(s, m = 28) {
@@ -289,7 +289,8 @@ function d3Donut(el, obj, unit) {
 }
 
 // ==================== D3 BUBBLE (empresa vs Bs/litro) ====================
-function d3Bubble(el, rows) {
+function d3Bubble(el, rows, marcadores) {
+  const marcas = (marcadores || []).map(Number).filter((n) => Number.isFinite(n));
   const entries = (rows || [])
     .slice()
     .sort((a, b) => b.volumen - a.volumen)
@@ -300,7 +301,9 @@ function d3Bubble(el, rows) {
 
   const labels = entries.map((e) => sl(e.empresa, 24));
   const yMin = 0;
-  const yMax = 20;
+  const maxPrecio = d3.max(entries, (e) => Number(e.precio_bs_litro)) || 0;
+  const maxMarca = marcas.length ? Math.max(...marcas) : 0;
+  const yMax = Math.max(Math.ceil(Math.max(maxPrecio, maxMarca, 20)) + 1, 20);
 
   const x = d3.scalePoint().domain(labels).range([0, iw]).padding(0.5);
   const y = d3.scaleLinear().domain([yMin, yMax]).range([ih, 0]);
@@ -312,7 +315,7 @@ function d3Bubble(el, rows) {
   g.append('text').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -56)
     .attr('fill', '#374151').style('font-size', '15px').style('text-anchor', 'middle').text('Bs / Litro');
 
-  [18, 16.5].forEach((v) => {
+  marcas.forEach((v) => {
     g.append('line').attr('x1', 0).attr('x2', iw).attr('y1', y(v)).attr('y2', y(v))
       .attr('stroke', '#f59e0b').attr('stroke-width', 2).attr('stroke-dasharray', '6,4');
     g.append('text').attr('x', iw - 4).attr('y', y(v) - 10).attr('text-anchor', 'end')
@@ -320,11 +323,11 @@ function d3Bubble(el, rows) {
       .text(`${v} Bs/L`);
   });
 
-  g.selectAll('.bubble').data(entries).join('circle')
+  g.selectAll('.bubble').data(entries).join('ellipse')
     .attr('class', 'bubble')
     .attr('cx', (e) => x(sl(e.empresa, 24)))
     .attr('cy', (e) => y(e.precio_bs_litro))
-    .attr('r', 14)
+    .attr('rx', 14).attr('ry', 7)
     .attr('fill', '#3b82f6').attr('fill-opacity', 0.55).attr('stroke', '#2563eb').attr('stroke-width', 1.5)
     .on('mouseover', function (evt, e) {
       d3.select(this).attr('fill-opacity', 0.9);
@@ -332,26 +335,23 @@ function d3Bubble(el, rows) {
     })
     .on('mouseout', function () { d3.select(this).attr('fill-opacity', 0.55); tip.hide(); });
 
+  g.selectAll('.bubble-vol').data(entries).join('text')
+    .attr('class', 'bubble-vol')
+    .attr('x', (e) => x(sl(e.empresa, 24)))
+    .attr('y', (e) => y(e.precio_bs_litro) - 11)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#374151').style('font-size', '12px').style('font-weight', '700')
+    .text((e) => `${fmt(e.volumen, 0)} M³`);
+
   if (labels.length) {
     const xAxisG = g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`);
     xAxisG.selectAll('.tick').data(entries).join('g')
       .attr('class', 'tick').attr('transform', (e) => `translate(${x(sl(e.empresa, 24))},0)`)
       .append('line').attr('y2', 6).attr('stroke', '#d1d5db');
     xAxisG.selectAll('.xlabel').data(entries).join('text')
-      .attr('class', 'xlabel').attr('x', (e) => x(sl(e.empresa, 24))).attr('y', 18)
-      .attr('text-anchor', 'middle').attr('fill', '#1f2937').style('font-size', '14px')
-      .each(function (e) {
-        const txt = sl(e.empresa, 30);
-        const words = txt.split(' ');
-        const elT = d3.select(this);
-        if (words.length > 3) {
-          const mid = Math.ceil(words.length / 2);
-          elT.append('tspan').attr('x', x(sl(e.empresa, 24))).attr('dy', '0').text(words.slice(0, mid).join(' '));
-          elT.append('tspan').attr('x', x(sl(e.empresa, 24))).attr('dy', '14').text(words.slice(mid).join(' '));
-        } else {
-          elT.text(txt);
-        }
-      });
+      .attr('class', 'xlabel').attr('x', (e) => x(sl(e.empresa, 24))).attr('y', (e, i) => 16 + (i % 2) * 14)
+      .attr('text-anchor', 'middle').attr('fill', '#1f2937').style('font-size', '11px')
+      .text((e) => sl(e.empresa, 24));
   } else {
     g.append('text').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle')
       .attr('fill', '#9ca3af').style('font-size', '13px').text('Sin datos');
@@ -546,7 +546,7 @@ function CardFrame({ title, open, onToggle, active, filtro, setFiltro, options, 
   );
 }
 
-function ChartCard({ title, tab, options, extra, render, minHeight, soloAnio }) {
+function ChartCard({ title, tab, options, extra, render, minHeight, soloAnio, extraTop, renderKey }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [filtro, setFiltro] = useState(defaultFiltro);
   const [open, setOpen] = useState(false);
@@ -556,7 +556,7 @@ function ChartCard({ title, tab, options, extra, render, minHeight, soloAnio }) 
   useEffect(() => {
     if (data && render && ref.current) render(ref.current, data, { filters, options, filtro });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [data, renderKey]);
 
   return (
     <CardFrame
@@ -570,6 +570,7 @@ function ChartCard({ title, tab, options, extra, render, minHeight, soloAnio }) 
       soloAnio={soloAnio}
     >
       {open && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
+      {extraTop}
       {error && <p className="error">{error}</p>}
       {loading && <p className="empty">Cargando…</p>}
       {!loading && !error && !data && <p className="empty">Sin datos.</p>}
@@ -650,17 +651,68 @@ function WeeklyTable({ tab, options }) {
   );
 }
 
-function BubbleCard({ title, tab, options, ypfb }) {
+function MarcadorEditor({ valores, onChange, canWrite, onAplicar }) {
+  if (!canWrite) return null;
+
+  function setValor(i, v) {
+    const next = valores.slice();
+    next[i] = v;
+    onChange(next);
+  }
+  function agregar() {
+    onChange([...valores, '']);
+  }
+  function quitar(i) {
+    onChange(valores.filter((_, k) => k !== i));
+  }
+
+  return (
+    <div className="dash-markers">
+      <span className="dash-markers-label">Marcadores (Bs/L):</span>
+      {valores.map((v, i) => (
+        <span className="dash-marker-chip" key={i}>
+          <input
+            type="number"
+            step="0.1"
+            value={v}
+            onChange={(e) => setValor(i, e.target.value)}
+          />
+          <button type="button" className="dash-marker-x" onClick={() => quitar(i)} title="Quitar">×</button>
+        </span>
+      ))}
+      <button type="button" className="dash-btn dash-btn-sm" onClick={agregar}>+ Marcador</button>
+      <button type="button" className="dash-btn dash-btn-sm" onClick={onAplicar}>Aplicar</button>
+    </div>
+  );
+}
+
+function BubbleCard({ title, tab, options, ypfb, marcadores, canWrite, onAplicar }) {
+  const grafico = ypfb ? 'ypfb' : 'empresa';
   const extra = ypfb
     ? { chart: 'burbujas', importador: ['YPFB', '1020269020'] }
     : { chart: 'burbujas' };
+  const [local, setLocal] = useState(marcadores || []);
+
+  useEffect(() => {
+    setLocal(marcadores || []);
+  }, [marcadores]);
+
   return (
     <ChartCard
       title={title}
       tab={tab}
       options={options}
       extra={extra}
-      render={(el, d) => d3Bubble(el, d.burbujas)}
+      renderKey={JSON.stringify(local)}
+      extraTop={
+        <MarcadorEditor
+          valores={local}
+          onChange={setLocal}
+          canWrite={canWrite}
+          onAplicar={() => onAplicar(grafico, local)}
+        />
+      }
+      render={(el, d) => d3Bubble(el, d.burbujas, local)}
     />
   );
 }
@@ -711,16 +763,27 @@ function defaultFiltro() {
   return { anio: String(anio), meses: [String(pm + 1)] };
 }
 
-export default function DashboardSection() {
+export default function DashboardSection({ canWrite }) {
   const [tab, setTab] = useState('diesel');
   const [options, setOptions] = useState(null);
   const [error, setError] = useState(null);
   const [kpiFiltro] = useState(defaultFiltro);
   const kpi = useKpis(tab, kpiFiltro);
+  const [marcadores, setMarcadores] = useState({ empresa: [], ypfb: [] });
 
   useEffect(() => {
     getDashboardFilters().then(setOptions).catch((e) => setError(e.message));
+    getMarcadores().then(setMarcadores).catch(() => {});
   }, []);
+
+  async function aplicarMarcadores(grafico, valores) {
+    try {
+      const r = await putMarcadores(grafico, valores);
+      setMarcadores(r);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
 
   const kpiList = kpi ? [
     ['Precio Marcador', fmt$(kpi.precio_marcador), '$/M³'],
@@ -766,10 +829,8 @@ export default function DashboardSection() {
       <WeeklyTable tab={tab} options={options} />
 
       <div className="dash-st">Precio por Empresa (Bs/litro)</div>
-      <div className="dash-row">
-        <div className="dash-half"><BubbleCard title="Precio Promedio por Empresa (Bs/litro)" tab={tab} options={options} /></div>
-        <div className="dash-half"><BubbleCard title="Precio Promedio YPFB (Bs/litro)" tab={tab} options={options} ypfb /></div>
-      </div>
+      <BubbleCard title="Precio Promedio por Empresa (Bs/litro)" tab={tab} options={options} marcadores={marcadores.empresa} canWrite={canWrite} onAplicar={aplicarMarcadores} />
+      <BubbleCard title="Precio Promedio YPFB (Bs/litro)" tab={tab} options={options} ypfb marcadores={marcadores.ypfb} canWrite={canWrite} onAplicar={aplicarMarcadores} />
 
       <div className="dash-st">Logística</div>
       <div className="dash-row">

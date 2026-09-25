@@ -44,15 +44,19 @@ El sistema SHALL permitir consultar la sesión actual y cerrarla.
 
 ### Requirement: Control de acceso por rol
 
-El sistema SHALL exigir sesión válida para toda la API y SHALL limitar al rol `presentacion` a los endpoints de autenticación y del panel (`/api/auth/*` y `/api/dashboard/*`); el resto de la API SHALL requerir rol `admin`.
+El sistema SHALL exigir sesión válida para toda la API. El rol `presentacion` SHALL tener acceso de solo lectura (`GET`) a los endpoints de autenticación, del panel, de manifiestos, de combustibles, de tipo de cambio y de precio marcador, además de la lista de clientes; cualquier escritura (`POST`/`PUT`) y el resto de la API SHALL requerir rol `admin`.
 
 #### Scenario: Sin sesión
 - **WHEN** una petición llega sin cookie de sesión válida
 - **THEN** el sistema responde con error de no autenticado
 
 #### Scenario: Usuario de presentación fuera de su alcance
-- **WHEN** un usuario con rol `presentacion` accede a un endpoint que no es de autenticación ni del panel
+- **WHEN** un usuario con rol `presentacion` intenta una operación de escritura (POST/PUT) o accede a una sección no permitida
 - **THEN** el sistema responde con error de acceso denegado
+
+#### Scenario: Usuario de presentación con lectura permitida
+- **WHEN** un usuario con rol `presentacion` consulta (GET) manifiestos, combustibles, tipo de cambio, precio marcador, la lista de clientes o el panel
+- **THEN** el sistema responde con los datos
 
 #### Scenario: Administrador con acceso total
 - **WHEN** un usuario con rol `admin` accede a cualquier endpoint
@@ -76,11 +80,11 @@ El sistema SHALL permitir al rol `admin` listar, crear y editar cuentas (usuario
 
 ### Requirement: Acceso por rol en la interfaz
 
-El sistema SHALL mostrar las secciones de la interfaz según el rol: `admin` ve todas las secciones y la sección Usuarios; `presentacion` ve solo la sección Presentación.
+El sistema SHALL mostrar las secciones de la interfaz según el rol: `admin` ve todas las secciones y la sección Usuarios; `presentacion` ve Manifiestos, Combustibles, Presentación, Precio Marcador y Tipo de Cambio, sin los botones de acción que ejecutan corridas o modifican datos.
 
 #### Scenario: Usuario de presentación
 - **WHEN** un usuario con rol `presentacion` entra a la aplicación
-- **THEN** ve únicamente la sección Presentación, y puede usar sus filtros y pestañas
+- **THEN** ve las secciones Manifiestos, Combustibles, Presentación, Precio Marcador y Tipo de Cambio, y no ve los botones que ejecutan corridas ni editan datos
 
 #### Scenario: Administrador
 - **WHEN** un usuario con rol `admin` entra a la aplicación

@@ -375,3 +375,46 @@ export async function getDashboardData(query) {
     monthly_ops,
   };
 }
+
+// ==================== MARCADORES DE REFERENCIA (burbujas) ====================
+
+export async function getMarcadores() {
+  const { rows } = await pool.query(
+    'SELECT grafico, valor FROM marcadores_burbuja ORDER BY grafico, orden, valor',
+  );
+  const out = { empresa: [], ypfb: [] };
+  for (const r of rows) {
+    if (!out[r.grafico]) out[r.grafico] = [];
+    out[r.grafico].push(Number(r.valor));
+  }
+  return out;
+}
+
+// Reemplaza el conjunto de marcadores de un grafico (guarda los vigentes y
+// elimina los que se quitaron).
+export async function setMarcadores(grafico, valores) {
+  const nums = (Array.isArray(valores) ? valores : [])
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM marcadores_burbuja WHERE grafico = $1', [grafico]);
+    let orden = 0;
+    for (const valor of nums) {
+      await client.query(
+        `INSERT INTO marcadores_burbuja (grafico, valor, orden)
+         VALUES ($1, $2, $3) ON CONFLICT (grafico, valor) DO NOTHING`,
+        [grafico, valor, orden],
+      );
+      orden += 1;
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return getMarcadores();
+}

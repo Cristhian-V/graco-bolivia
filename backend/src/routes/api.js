@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { pool } from '../db.js';
 import { executeManifiestosRun } from '../services/manifiestosService.js';
 import { executeCombustiblesRun } from '../services/combustiblesService.js';
-import { getDashboardFilters, getDashboardKpis, getDashboardData, seedDetallesDesdeExcel, upsertDetalle } from '../services/presentacionService.js';
+import { getDashboardFilters, getDashboardKpis, getDashboardData, seedDetallesDesdeExcel, upsertDetalle, getMarcadores, setMarcadores } from '../services/presentacionService.js';
 import { actualizarTipoCambioRango, sincronizarTipoCambioCombustibles } from '../services/tipoCambioService.js';
 import {
   leerPrecioMarcador,
@@ -629,6 +629,27 @@ router.get('/dashboard/kpis', async (req, res, next) => {
 router.get('/dashboard/data', async (req, res, next) => {
   try {
     res.json(await getDashboardData(req.query));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/dashboard/marcadores', async (req, res, next) => {
+  try {
+    res.json(await getMarcadores());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.put('/dashboard/marcadores/:grafico', async (req, res, next) => {
+  try {
+    const grafico = req.params.grafico;
+    if (grafico !== 'empresa' && grafico !== 'ypfb') {
+      return res.status(400).json({ error: 'Gráfico inválido' });
+    }
+    const valores = (req.body && req.body.valores) || [];
+    res.json(await setMarcadores(grafico, valores));
   } catch (e) {
     next(e);
   }
