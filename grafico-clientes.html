@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operaciones por Cliente</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --accent: #2a78d6; --accent-wash: rgba(42,120,214,.10);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+    --heat-0: #fcfcfb; --heat-1: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --accent:#3987e5; --accent-wash:rgba(57,135,229,.16);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+      --heat-0:#1a1a19; --heat-1:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --accent:#3987e5; --accent-wash:rgba(57,135,229,.16);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --heat-0:#1a1a19; --heat-1:#3987e5;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--page); color:var(--ink);
+         font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:16px; margin:0; }
+  .sub { color:var(--ink-2); margin:0 0 16px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+  .filters label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--ink-2); text-transform:uppercase; letter-spacing:.03em; }
+  select, button, input { font:inherit; color:var(--ink); background:var(--surface); border:1px solid var(--axis); border-radius:6px; padding:6px 10px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  /* Selector de mes: un botón por mes con su total */
+  .meses { display:grid; grid-template-columns:repeat(13, minmax(0,1fr)); gap:6px; margin-top:14px; }
+  .mes { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; border-radius:6px; }
+  .mes .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .mes.sel { border-color:var(--accent); background:var(--accent-wash); font-weight:700; }
+  .mes.sel .n { color:var(--ink-2); }
+  .mes:disabled { opacity:.4; cursor:default; }
+  @media (max-width:760px){ .meses{ grid-template-columns:repeat(7, minmax(0,1fr)); } }
+
+  .head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .head .meta { color:var(--ink-2); font-size:13px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0 0 10px; padding:0; list-style:none; }
+  .legend li { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-2); cursor:pointer; user-select:none; }
+  .legend li.off { opacity:.35; text-decoration:line-through; }
+  .sw { width:12px; height:12px; border-radius:3px; flex:none; display:inline-block; }
+  .chart-wrap { position:relative; }
+  .vacio { color:var(--muted); text-align:center; padding:40px 0; }
+
+  .table-wrap { overflow-x:auto; }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-variant-numeric:tabular-nums; }
+  th, td { padding:7px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--grid); }
+  th { font-size:12px; color:var(--muted); font-weight:600; background:var(--surface); vertical-align:bottom; }
+  th.ad { white-space:normal; min-width:84px; }
+  th.ad .sw { width:10px; height:10px; margin-right:4px; vertical-align:-1px; }
+  th:first-child, td:first-child { text-align:left; position:sticky; left:0; background:var(--surface); z-index:1; }
+  td.empty { color:var(--muted); }
+  td.tot, th.tot { font-weight:700; border-left:1px solid var(--grid); }
+  tr.row:hover td { background-image:linear-gradient(var(--accent-wash),var(--accent-wash)); }
+  tfoot td { font-weight:700; border-bottom:none; border-top:2px solid var(--axis); }
+  .note { color:var(--muted); font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Operaciones por cliente</h1>
+  <p class="sub">Elige un mes o un rango de fechas en el calendario: el gráfico y la tabla muestran solo los clientes que tuvieron operaciones en ese periodo.</p>
+
+  <div class="card">
+    <div class="filters">
+      <label>Año <select id="anio"><option>2026</option></select></label>
+      <label>Desde <input type="date" id="desde" min="2026-01-01" max="2026-12-31"></label>
+      <label>Hasta <input type="date" id="hasta" min="2026-01-01" max="2026-12-31"></label>
+      <button id="limpiar" class="primary">Limpiar</button>
+    </div>
+    <div class="meses" id="meses"></div>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <h2 id="titulo-lineas">Tendencia mensual por cliente</h2>
+      <span class="meta" id="meta-lineas"></span>
+    </div>
+    <ul class="legend" id="legend-lineas"></ul>
+    <div class="chart-wrap" style="height:340px"><canvas id="chart-lineas" aria-label="Operaciones mensuales por cliente"></canvas></div>
+    <p class="note">Solo se muestran los clientes con operaciones en el periodo elegido. Con un mes (o un rango corto) el gráfico va día por día; con el año, mes por mes — ahí puedes hacer clic en un mes para abrirlo. Pasa el cursor por un cliente para resaltar su línea.</p>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <h2 id="titulo-tabla"></h2>
+      <span class="meta" id="meta"></span>
+    </div>
+    <div class="table-wrap"><table id="tabla"></table></div>
+    <p class="note">Operaciones de cada cliente por aduana en el periodo elegido. Pasa el cursor por una fila para resaltar su línea en el gráfico.</p>
+  </div>
+</main>
+
+<script>
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const ADUANAS = ['TAMBO QUEMADO','DESAGUADERO','AVAROA','PISIGA','YACUIBA','APACHETA','CAÑADA ORURO'];
+
+// ===== Datos de ejemplo =====
+// En producción la API debería devolver filas planas, ya filtradas por proveedor/procedencia:
+//   [{ cliente, fecha: 'YYYY-MM-DD', aduana, operaciones }, ...]
+// y asignarlas a OPERACIONES. Aquí se generan a partir de los totales mensuales del gráfico original.
+const EJEMPLO = [
+  { cliente:'MONICA LIZZETH CON...',    valores:[72,90,245,25,47,35,208,81,58,0] },
+  { cliente:'BARAN GLOBAL ENGINEERING', valores:[7,26,5,0,10,4,47,104,49,0] },
+  { cliente:'RAUL BRIAN CLAURE',        valores:[6,13,15,4,14,9,59,45,39,0] },
+  { cliente:'INTPETROL S.R.L.',         valores:[25,7,30,18,8,0,12,27,19,0] },
+  { cliente:'SODIMCO LTDA.',            valores:[13,17,13,0,0,0,28,27,19,0] },
+  { cliente:'HIDROFOSAC SERVICIOS',     valores:[19,15,12,0,9,5,35,10,6,0] },
+  { cliente:'SOL ENERGY GROUP',         valores:[5,21,32,0,1,3,28,6,10,0] },
+];
+const OPERACIONES = [];
+EJEMPLO.forEach((c, ci) => {
+  // Cada cliente usa sobre todo 2-3 fronteras (pesos deterministas para que el ejemplo sea estable).
+  const pesos = ADUANAS.map((_, ai) => [6,3,1,0,0,2,0][(ai - ci + 7) % 7]);
+  const suma = pesos.reduce((s,p)=>s+p,0);
+  c.valores.forEach((total, mes) => {
+    const ns = pesos.map(p => Math.floor(total * p / suma));
+    ns[pesos.indexOf(6)] += total - ns.reduce((s,n)=>s+n,0);   // el resto a la frontera principal
+    const dias = new Date(2026, mes + 1, 0).getDate();
+    ns.forEach((n, ai) => {
+      for (let k = 0; k < n; k++) {   // reparte cada operación en un día del mes
+        const dia = 1 + ((ci * 7 + ai * 3 + k * 5) % dias);
+        OPERACIONES.push({ cliente:c.cliente, fecha:`2026-${String(mes+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`,
+                           aduana:ADUANAS[ai], operaciones:1 });
+      }
+    });
+  });
+});
+// =============================
+OPERACIONES.forEach(o => o.mes = +o.fecha.slice(5,7) - 1);
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sum = v => v.reduce((s,x)=>s+x,0);
+// Color fijo por cliente en el gráfico de líneas (máx. 8; el resto iría a "Otros")
+const CLIENTES = [...new Set(OPERACIONES.map(o => o.cliente))];
+const SLOT_CLIENTE = Object.fromEntries(CLIENTES.map((c,i) => [c, `--s${i+1}`]));
+const aduanaVisible = Object.fromEntries(ADUANAS.map(ad => [ad, true]));
+
+const ultimoMesConDatos = Math.max(...OPERACIONES.map(o => o.mes));
+const desdeIn = document.getElementById('desde'), hastaIn = document.getElementById('hasta');
+const ANIO = +document.getElementById('anio').value;
+const iso = (y,m,d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+const rangoMes = m => [iso(ANIO, m, 1), iso(ANIO, m, new Date(ANIO, m+1, 0).getDate())];
+const rangoAnio = () => [iso(ANIO, 0, 1), iso(ANIO, 11, 31)];
+const fmt = s => { const [y,m,d] = s.split('-'); return `${+d} ${MESES[+m-1]} ${y}`; };
+// El periodo vive en los dos calendarios; los botones de mes solo los rellenan
+function setRango([a,b]) { desdeIn.value = a; hastaIn.value = b; }
+function periodo() {
+  let a = desdeIn.value || rangoAnio()[0], b = hastaIn.value || rangoAnio()[1];
+  return a <= b ? [a,b] : [b,a];
+}
+setRango(rangoMes(ultimoMesConDatos));
+
+const filasDelPeriodo = () => { const [a,b] = periodo();
+  return OPERACIONES.filter(o => o.fecha >= a && o.fecha <= b && aduanaVisible[o.aduana]); };
+function nombrePeriodo() {
+  const [a,b] = periodo(), r = a + b;
+  if (r === rangoAnio().join('')) return `Todo ${ANIO}`;
+  const m = MESES.findIndex((_,i) => rangoMes(i).join('') === r);
+  return m >= 0 ? `${MESES[m]} ${ANIO}` : `${fmt(a)} – ${fmt(b)}`;
+}
+
+// Matriz cliente × aduana del periodo, solo clientes con operaciones, de mayor a menor
+function matriz() {
+  const filas = filasDelPeriodo(), m = new Map();
+  filas.forEach(o => {
+    if (!m.has(o.cliente)) m.set(o.cliente, Object.fromEntries(ADUANAS.map(ad => [ad, 0])));
+    m.get(o.cliente)[o.aduana] += o.operaciones;
+  });
+  return [...m.entries()]
+    .map(([cliente, porAduana]) => ({ cliente, porAduana, total: sum(Object.values(porAduana)) }))
+    .filter(r => r.total > 0)
+    .sort((a,b) => b.total - a.total);
+}
+
+function buildMeses() {
+  const cont = document.getElementById('meses'); cont.innerHTML = '';
+  const actual = periodo().join('');
+  const boton = (label, rango, total) => {
+    const b = document.createElement('button');
+    b.className = 'mes' + (rango.join('') === actual ? ' sel' : '');
+    b.innerHTML = `<span>${label}</span><span class="n">${total ?? '–'}</span>`;
+    b.disabled = total == null;
+    b.onclick = () => { setRango(rango); render(); };
+    cont.appendChild(b);
+  };
+  MESES.forEach((m,i) => {
+    const filas = OPERACIONES.filter(o => o.mes === i && aduanaVisible[o.aduana]);
+    boton(m, rangoMes(i), i > ultimoMesConDatos ? null : sum(filas.map(o => o.operaciones)));
+  });
+  boton('Año', rangoAnio(), sum(OPERACIONES.filter(o => aduanaVisible[o.aduana]).map(o => o.operaciones)));
+}
+
+// Franja vertical sobre los meses que abarca el periodo
+const bandaPeriodo = {
+  id:'bandaPeriodo',
+  beforeDatasetsDraw(c) {
+    const { activo, desde, hasta } = c.options.plugins.bandaPeriodo, x = c.scales.x, area = c.chartArea;
+    if (!activo) return;
+    const paso = x.getPixelForValue(1) - x.getPixelForValue(0);
+    const x0 = Math.max(area.left, x.getPixelForValue(desde) - paso/2), x1 = Math.min(area.right, x.getPixelForValue(hasta) + paso/2);
+    c.ctx.save(); c.ctx.fillStyle = css('--grid'); c.ctx.globalAlpha = .6;
+    c.ctx.fillRect(x0, area.top, x1 - x0, area.bottom - area.top); c.ctx.restore();
+  },
+};
+
+let lineChart, clienteHl = null;
+function buildLineChart(rows) {
+  const activos = new Set(rows.map(r => r.cliente));
+  const clientes = CLIENTES.filter(c => activos.has(c));
+  if (!activos.has(clienteHl)) clienteHl = null;   // el resaltado no debe quedar pegado al cambiar de periodo
+  const [a,b] = periodo();
+  // Periodo corto (un mes o rango de hasta ~2 meses) → eje por día; si no → eje por mes
+  const dias = Math.round((new Date(b) - new Date(a)) / 864e5) + 1;
+  const diario = dias <= 62;
+  let grupos;   // [{ label, clave }] — clave = fecha (diario) o índice de mes
+  if (diario) {
+    grupos = [];
+    for (let d = new Date(a + 'T00:00'); d <= new Date(b + 'T00:00'); d.setDate(d.getDate() + 1)) {
+      const f = iso(d.getFullYear(), d.getMonth(), d.getDate());
+      grupos.push({ label: `${d.getDate()} ${MESES[d.getMonth()]}`, clave: f });
+    }
+  } else {
+    grupos = MESES.map((m,i) => ({ label: m, clave: i })).filter(g => g.clave <= ultimoMesConDatos);
+  }
+  const claveDe = o => diario ? o.fecha : o.mes;
+  const anioCompleto = a + b === rangoAnio().join('');
+  document.getElementById('titulo-lineas').textContent = diario
+    ? `Tendencia diaria por cliente · ${nombrePeriodo()}` : `Tendencia mensual por cliente · ${nombrePeriodo()}`;
+  const datasets = clientes.map(cl => {
+    const color = css(SLOT_CLIENTE[cl]), dim = clienteHl && clienteHl !== cl;
+    const porClave = new Map();
+    OPERACIONES.filter(o => o.cliente === cl && aduanaVisible[o.aduana])
+      .forEach(o => porClave.set(claveDe(o), (porClave.get(claveDe(o)) || 0) + o.operaciones));
+    const data = grupos.map(g => porClave.get(g.clave) || 0);
+    return {
+      label: cl, data,
+      borderColor: dim ? color + '26' : color, backgroundColor: color,
+      pointBackgroundColor: dim ? color + '26' : color, pointBorderColor: css('--surface'), pointBorderWidth: 1.5,
+      borderWidth: clienteHl === cl ? 3 : 2, pointRadius: diario ? 2 : 3, pointHoverRadius: 6, tension: .3, cubicInterpolationMode: 'monotone',
+      order: clienteHl === cl ? 0 : 1,
+    };
+  });
+  document.getElementById('meta-lineas').textContent = `${clientes.length} de ${CLIENTES.length} clientes`;
+
+  const ul = document.getElementById('legend-lineas'); ul.innerHTML = '';
+  clientes.forEach(cl => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="sw" style="background:var(${SLOT_CLIENTE[cl]})"></span>${cl}`;
+    li.onmouseenter = () => { clienteHl = cl; buildLineChart(rows); };
+    li.onmouseleave = () => { clienteHl = null; buildLineChart(rows); };
+    ul.appendChild(li);
+  });
+
+  const cfg = {
+    type:'line',
+    data:{ labels: grupos.map(g => g.label), datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{ mode:'index', intersect:false },
+      onClick:(e) => {
+        if (diario) return;
+        const m = Math.round(lineChart.scales.x.getValueForPixel(e.x));
+        if (m >= 0 && m <= ultimoMesConDatos) { setRango(rangoMes(m)); render(); }
+      },
+      onHover:(e) => { e.native.target.style.cursor = diario ? 'default' : 'pointer'; },
+      plugins:{
+        legend:{ display:false },
+        bandaPeriodo:{ activo: !diario && !anioCompleto, desde: +a.slice(5,7) - 1, hasta: +b.slice(5,7) - 1 },
+        tooltip:{
+          itemSort:(x,y) => y.parsed.y - x.parsed.y,
+          backgroundColor: css('--surface'), titleColor: css('--ink'), bodyColor: css('--ink-2'),
+          borderColor: css('--axis'), borderWidth:1, padding:10, usePointStyle:true, boxPadding:4,
+        },
+      },
+      scales:{
+        x:{ grid:{ display:false }, border:{ color:css('--axis') }, ticks:{ color:css('--muted'), autoSkip:true, maxRotation:0 } },
+        y:{ beginAtZero:true, title:{ display:true, text:'Operaciones', color:css('--muted') },
+            grid:{ color:css('--grid') }, border:{ display:false }, ticks:{ color:css('--muted'), precision:0 } },
+      },
+    },
+    plugins:[bandaPeriodo],
+  };
+  if (lineChart) { lineChart.data = cfg.data; lineChart.options = cfg.options; lineChart.update(); }
+  else lineChart = new Chart(document.getElementById('chart-lineas'), cfg);
+}
+
+function buildTable(rows) {
+  const ads = ADUANAS.filter(ad => aduanaVisible[ad]);
+  const max = Math.max(1, ...rows.flatMap(r => ads.map(ad => r.porAduana[ad])));
+  const heat0 = css('--heat-0'), heat1 = css('--heat-1');
+  let html = `<thead><tr><th>Cliente</th>${ads.map(ad =>
+    `<th class="ad">${ad}</th>`).join('')}<th class="tot">Total</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += `<tr class="row" data-cliente="${r.cliente}"><td><span class="sw" style="background:var(${SLOT_CLIENTE[r.cliente]});margin-right:8px;vertical-align:-1px"></span>${r.cliente}</td>`;
+    ads.forEach(ad => {
+      const v = r.porAduana[ad];
+      if (!v) { html += `<td class="empty">0</td>`; return; }
+      const p = Math.round((v/max)*85);
+      html += `<td title="${r.cliente} · ${ad}: ${v}" style="background:color-mix(in oklab, ${heat1} ${p}%, ${heat0});${p>45?'color:#fff':''}">${v}</td>`;
+    });
+    html += `<td class="tot">${r.total}</td></tr>`;
+  });
+  if (!rows.length) html += `<tr><td class="empty" colspan="${ads.length + 2}">Sin operaciones</td></tr>`;
+  const colTot = ads.map(ad => sum(rows.map(r => r.porAduana[ad])));
+  html += `</tbody><tfoot><tr><td>Total</td>${colTot.map(v => `<td>${v}</td>`).join('')}<td class="tot">${sum(colTot)}</td></tr></tfoot>`;
+  document.getElementById('tabla').innerHTML = html;
+}
+
+function render() {
+  clienteHl = null;
+  const rows = matriz();
+  const total = sum(rows.map(r => r.total));
+  document.getElementById('titulo-tabla').textContent = `Operaciones por aduana · ${nombrePeriodo()}`;
+  document.getElementById('meta').textContent = `${rows.length} clientes con operaciones · ${total} operaciones`;
+  buildMeses(); buildLineChart(rows); buildTable(rows);
+  // Hover en una fila de la tabla = resaltar la línea del cliente
+  document.querySelectorAll('tr.row').forEach(tr => {
+    tr.onmouseenter = () => { clienteHl = tr.dataset.cliente; buildLineChart(rows); };
+    tr.onmouseleave = () => { clienteHl = null; buildLineChart(rows); };
+  });
+}
+
+document.getElementById('limpiar').onclick = () => {
+  ADUANAS.forEach(ad => aduanaVisible[ad] = true); setRango(rangoMes(ultimoMesConDatos)); render();
+};
+desdeIn.onchange = hastaIn.onchange = render;
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

@@ -38,74 +38,82 @@ function svgEl(el, w, h, margin) {
   return { svg, g, w: w - m.left - m.right, h: h - m.top - m.bottom, m };
 }
 
-// ==================== D3 LINE (frecuencia mensual por empresa) ====================
-function d3Line(el, points, companies) {
-  if (!points.length) return;
-  const w = 1000, h = 420, m = { top: 10, right: 30, bottom: 100, left: 50 };
-  const { svg, g, w: iw, h: ih } = svgEl(el, w, h, m);
+// ==================== D3 MULTI-LINE (frecuencia por importador) ====================
+function procColor(i) {
+  return d3.hsl((i * 137.508) % 360, 0.62, 0.46).formatHex();
+}
 
-  const labels = points.map((p) => p.label);
-  const values = points.map((p) => p.value);
-  const maxVal = d3.max(values) || 300;
-  const yMax = Math.ceil(maxVal / 50) * 50 + 50;
+function d3MultiLine(el, model, highlight) {
+  const { months, top, colorOf } = model;
+  const w = 1000, h = 420, m = { top: 10, right: 30, bottom: 40, left: 50 };
+  const { g, w: iw, h: ih } = svgEl(el, w, h, m);
 
-  const x = d3.scalePoint().domain(labels).range([0, iw]).padding(0.5);
-  const y = d3.scaleLinear().domain([0, yMax]).range([ih, 0]);
+  if (!months.length || !top.length) {
+    g.append('text').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle')
+      .attr('fill', '#9ca3af').style('font-size', '13px').text('Sin datos');
+    return;
+  }
+
+  const maxV = d3.max(top, (s) => d3.max(s.values)) || 0;
+  const x = d3.scalePoint().domain(months).range([0, iw]).padding(0.5);
+  const y = d3.scaleLinear().domain([0, Math.max(1, maxV)]).nice().range([ih, 0]);
 
   g.append('g').attr('class', 'grid')
-    .call(d3.axisLeft(y).ticks(Math.ceil(yMax / 50)).tickSize(-iw).tickFormat(''));
-
+    .call(d3.axisLeft(y).ticks(5).tickSize(-iw).tickFormat(''));
   g.append('g').attr('class', 'axis')
-    .call(d3.axisLeft(y).ticks(Math.ceil(yMax / 50)));
-
+    .call(d3.axisLeft(y).ticks(5)).selectAll('text').style('font-size', '12px');
   g.append('text').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -38)
-    .attr('fill', '#374151').style('font-size', '13px').style('text-anchor', 'middle').text('Frecuencia');
+    .attr('fill', '#374151').style('font-size', '13px').style('text-anchor', 'middle').text('Operaciones');
 
-  const line = d3.line().x((d, i) => x(labels[i])).y((d) => y(d)).curve(d3.curveLinear);
-  g.append('path').datum(values).attr('fill', 'none').attr('stroke', '#2563eb').attr('stroke-width', 2.5).attr('d', line);
+  g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`)
+    .call(d3.axisBottom(x).tickFormat((d) => MONTH_CAP[d] || d))
+    .selectAll('text').attr('fill', '#6b7280').style('font-size', '12px');
 
-  g.selectAll('.mdot').data(points).join('circle')
-    .attr('cx', (d, i) => x(labels[i]))
-    .attr('cy', (d) => y(d.value))
-    .attr('r', 3.5).attr('fill', '#2563eb').attr('stroke', '#fff').attr('stroke-width', 1.5)
-    .on('mouseover', function (evt, d) {
-      d3.select(this).attr('r', 6);
-      tip.show(evt, `<strong>${d.company}</strong><br>${d.month}: ${fmt(d.value)} ops`);
-    })
-    .on('mouseout', function () { d3.select(this).attr('r', 3.5); tip.hide(); });
+  const line = d3.line().x((d, i) => x(months[i])).y((d) => y(d)).curve(d3.curveLinear);
 
-  const xAxisG = g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`);
-  xAxisG.selectAll('.tick').data(points).join('g')
-    .attr('class', 'tick').attr('transform', (d, i) => `translate(${x(labels[i])},0)`)
-    .append('line').attr('y2', 6).attr('stroke', '#d1d5db');
+  top.forEach((s) => {
+    const color = colorOf(s.name);
+    const dim = highlight && highlight !== s.name;
+    const isHi = highlight === s.name;
 
-  xAxisG.selectAll('.mlabel').data(points).join('text')
-    .attr('class', 'mlabel')
-    .attr('transform', (d, i) => `translate(${x(labels[i])},16) rotate(-90)`)
-    .attr('text-anchor', 'end')
-    .attr('dy', '0.32em')
-    .attr('fill', '#6b7280').style('font-size', '11px')
-    .text((d) => MONTH_CAP[d.monthKey] || d.monthKey);
+    g.append('path').datum(s.values)
+      .attr('fill', 'none').attr('stroke', color)
+      .attr('stroke-width', isHi ? 4 : 2.5)
+      .attr('stroke-opacity', dim ? 0.15 : 1)
+      .attr('d', line);
 
-  const coStart = {};
-  const coEnd = {};
-  points.forEach((p) => { if (!(p.companyIdx in coStart)) coStart[p.companyIdx] = p; coEnd[p.companyIdx] = p; });
-  Object.keys(coStart).forEach((idx) => {
-    const s = coStart[idx], e = coEnd[idx];
-    const cxPos = (x(s.label) + x(e.label)) / 2;
-    const n = parseInt(idx, 10);
-    xAxisG.append('text')
-      .attr('x', cxPos).attr('y', 50 + (n % 2) * 14)
-      .attr('text-anchor', 'middle')
-      .attr('fill', '#1f2937').style('font-size', '11px').style('font-weight', '600')
-      .text(sl(s.company, 18));
-    if (n < companies.length - 1) {
-      const sepX = x(e.label) + (x(e.label) - x(s.label)) / 2;
-      g.append('line')
-        .attr('x1', sepX).attr('x2', sepX).attr('y1', 0).attr('y2', ih)
-        .attr('stroke', '#d1d5db').attr('stroke-width', 1).attr('stroke-dasharray', '3,4');
-    }
+    const pts = s.values.map((v, i) => ({ v, m: months[i] }));
+    g.selectAll(null).data(pts).join('circle')
+      .attr('cx', (p, i) => x(months[i]))
+      .attr('cy', (p) => y(p.v))
+      .attr('r', isHi ? 5 : 3.5)
+      .attr('fill', color).attr('stroke', '#fff').attr('stroke-width', 1.5)
+      .attr('fill-opacity', dim ? 0.15 : 1)
+      .on('mouseover', function (evt, p) {
+        tip.show(evt, `<strong>${sl(s.name, 35)}</strong><br>${MONTH_CAP[p.m] || p.m}: ${fmt(p.v)} ops`);
+      })
+      .on('mouseout', function () { tip.hide(); });
   });
+}
+
+function buildFrecuenciaModel(monthly, nImp, anio) {
+  const now = new Date();
+  const y = parseInt(anio, 10);
+  let maxMes = 12;
+  if (!Number.isNaN(y)) {
+    if (y === now.getFullYear()) maxMes = Math.max(1, now.getMonth() + 1);
+    else if (y > now.getFullYear()) maxMes = 0;
+  }
+  const months = MONTH_KEYS.slice(0, maxMes);
+  const names = Object.keys(monthly || {}).sort((a, b) => a.localeCompare(b));
+  const colorOf = (name) => procColor(Math.max(0, names.indexOf(name)));
+  const totals = {};
+  names.forEach((n) => { totals[n] = months.reduce((s, m) => s + (monthly[n][m] || 0), 0); });
+  const top = names.slice()
+    .sort((a, b) => (totals[b] - totals[a]) || a.localeCompare(b))
+    .slice(0, Math.max(1, nImp))
+    .map((name) => ({ name, total: totals[name], values: months.map((m) => monthly[name][m] || 0) }));
+  return { months, names, colorOf, totals, top };
 }
 
 // ==================== D3 BENCHMARK ====================
@@ -496,7 +504,7 @@ function FilterPanel({ filters, onChange, options }) {
   );
 }
 
-function CardFrame({ title, open, onToggle, active, filtro, setFiltro, options, soloAnio, children }) {
+function CardFrame({ title, open, onToggle, active, filtro, setFiltro, options, soloAnio, headerExtra, children }) {
   function toggleMes(i) {
     const key = String(i);
     const next = filtro.meses.includes(key)
@@ -510,6 +518,7 @@ function CardFrame({ title, open, onToggle, active, filtro, setFiltro, options, 
       <div className="dash-card-head">
         <h3 className="dash-card-title">{title}</h3>
         <div className="dash-card-hf">
+          {headerExtra}
           <select
             className="dash-year"
             value={filtro.anio}
@@ -717,38 +726,153 @@ function BubbleCard({ title, tab, options, ypfb, marcadores, canWrite, onAplicar
   );
 }
 
-function renderLine(el, g, ctx) {
-  const monthly = g.monthly_ops || {};
-  const hoy = new Date();
-  const anio = ctx && ctx.filtro && ctx.filtro.anio ? parseInt(ctx.filtro.anio, 10) : hoy.getFullYear();
-  let maxMes = 12;
-  if (anio === hoy.getFullYear()) maxMes = hoy.getMonth() + 1;
-  else if (anio > hoy.getFullYear()) maxMes = 0;
-  const selectedMonths = MONTH_KEYS.slice(0, maxMes);
+function AduanaTable({ model, matrix, aduanas, highlight, setHighlight }) {
+  const names = model.top.map((s) => s.name);
+  if (!names.length || !aduanas.length) return <p className="empty">Sin datos.</p>;
 
-  const topCos = Object.entries(monthly)
-    .sort((a, b) => {
-      const sa = selectedMonths.reduce((s, m) => s + (a[1][m] || 0), 0);
-      const sb = selectedMonths.reduce((s, m) => s + (b[1][m] || 0), 0);
-      return sb - sa;
-    })
-    .slice(0, 7);
+  const cell = (n, a) => (matrix[n] && matrix[n][a]) || 0;
+  const maxCell = Math.max(1, ...names.flatMap((n) => aduanas.map((a) => cell(n, a))));
+  const colTotals = aduanas.map((a) => names.reduce((s, n) => s + cell(n, a), 0));
+  const grand = colTotals.reduce((s, v) => s + v, 0);
 
-  const points = [];
-  topCos.forEach(([coName, mm], ci) => {
-    selectedMonths.forEach((m) => {
-      points.push({
-        label: `${sl(coName, 14)} / ${m}`,
-        company: coName,
-        month: MONTH_CAP[m] || m,
-        monthKey: m,
-        value: mm[m] || 0,
-        companyIdx: ci,
-      });
-    });
-  });
+  return (
+    <div className="table-scroll">
+      <table className="dash-aduana">
+        <thead>
+          <tr>
+            <th className="dash-aduana-name">Importador</th>
+            {aduanas.map((a) => <th key={a}>{a}</th>)}
+            <th className="tot">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {names.map((n) => {
+            const rowTotal = aduanas.reduce((s, a) => s + cell(n, a), 0);
+            return (
+              <tr
+                key={n}
+                className={highlight === n ? 'on' : ''}
+                onMouseEnter={() => setHighlight(n)}
+                onMouseLeave={() => setHighlight(null)}
+              >
+                <td className="dash-aduana-name">
+                  <span className="dash-legend-sw" style={{ background: model.colorOf(n) }} />
+                  {sl(n, 32)}
+                </td>
+                {aduanas.map((a) => {
+                  const v = cell(n, a);
+                  const p = Math.round((v / maxCell) * 85);
+                  return (
+                    <td
+                      key={a}
+                      className={v ? '' : 'empty'}
+                      style={v ? { background: `color-mix(in oklab, #2a78d6 ${p}%, #ffffff)`, color: p > 45 ? '#fff' : undefined } : undefined}
+                    >
+                      {v}
+                    </td>
+                  );
+                })}
+                <td className="tot">{rowTotal}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td className="dash-aduana-name">Total</td>
+            {colTotals.map((v, i) => <td key={aduanas[i]}>{v}</td>)}
+            <td className="tot">{grand}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
-  d3Line(el, points, topCos.map((c) => c[0]));
+function FrecuenciaAduanas({ tab, options }) {
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filtro, setFiltro] = useState(defaultFiltro);
+  const [nImp, setNImp] = useState(7);
+  const [openChart, setOpenChart] = useState(false);
+  const [openTable, setOpenTable] = useState(false);
+  const [highlight, setHighlight] = useState(null);
+  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'frecuencia' }, true);
+  const chartRef = useRef(null);
+
+  const monthly = (data && data.monthly_ops) || {};
+  const matrix = (data && data.aduana_matrix) || {};
+  const aduanas = (data && data.aduanas) || [];
+  const model = buildFrecuenciaModel(monthly, nImp, filtro.anio);
+
+  useEffect(() => {
+    if (chartRef.current) d3MultiLine(chartRef.current, model, highlight);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, nImp, highlight, loading]);
+
+  const cantidad = (
+    <label className="dash-nimp">
+      Importadores
+      <input
+        type="number"
+        min="1"
+        value={nImp}
+        onChange={(e) => setNImp(Math.max(1, parseInt(e.target.value, 10) || 1))}
+      />
+    </label>
+  );
+
+  return (
+    <>
+      <CardFrame
+        title="Frecuencia de Operaciones de Importación"
+        open={openChart}
+        onToggle={() => setOpenChart((o) => !o)}
+        active={hasActiveFilters(filters)}
+        filtro={filtro}
+        setFiltro={setFiltro}
+        options={options}
+        soloAnio
+        headerExtra={cantidad}
+      >
+        {openChart && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
+        {error && <p className="error">{error}</p>}
+        {loading && <p className="empty">Cargando…</p>}
+        {!loading && !error && !data && <p className="empty">Sin datos.</p>}
+        <div className="dash-legend">
+          {model.top.map((s) => (
+            <button
+              type="button"
+              key={s.name}
+              className={'dash-legend-item' + (highlight === s.name ? ' on' : '')}
+              onMouseEnter={() => setHighlight(s.name)}
+              onMouseLeave={() => setHighlight(null)}
+            >
+              <span className="dash-legend-sw" style={{ background: model.colorOf(s.name) }} />
+              {sl(s.name, 24)}
+            </button>
+          ))}
+        </div>
+        <div className="dash-cw" ref={chartRef} style={{ minHeight: 420 }} />
+      </CardFrame>
+
+      <CardFrame
+        title="Operaciones por Aduana por Importador"
+        open={openTable}
+        onToggle={() => setOpenTable((o) => !o)}
+        active={hasActiveFilters(filters)}
+        filtro={filtro}
+        setFiltro={setFiltro}
+        options={options}
+        soloAnio
+      >
+        {openTable && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
+        {error && <p className="error">{error}</p>}
+        {loading && <p className="empty">Cargando…</p>}
+        {!loading && !error && !data && <p className="empty">Sin datos.</p>}
+        {data && <AduanaTable model={model} matrix={matrix} aduanas={aduanas} highlight={highlight} setHighlight={setHighlight} />}
+      </CardFrame>
+    </>
+  );
 }
 
 function renderBenchmark(el, g) {
@@ -786,14 +910,9 @@ export default function DashboardSection({ canWrite }) {
   }
 
   const kpiList = kpi ? [
-    ['Precio Marcador', fmt$(kpi.precio_marcador), '$/M³'],
-    ['Precio Promedio', fmt$(kpi.precio_promedio), '$/M³'],
-    ['Total U$S CIF', fmt(kpi.total_cif, 0), 'Dólares'],
     ['Volumen Total', fmt(kpi.volumen_total, 2), 'M³'],
     ['Nº Operaciones', fmt(kpi.num_operaciones), 'Despachos'],
     ['Importadores', fmt(kpi.importadores), 'Empresas'],
-    ['Flete Total', fmt(kpi.flete_total_bs, 0), 'Bs'],
-    ['Tarifa Flete Prom.', fmt(kpi.tarifa_flete_bob_prom, 2), 'Bs/M³'],
   ] : [];
 
   return (
@@ -821,7 +940,7 @@ export default function DashboardSection({ canWrite }) {
         ))}
       </div>
 
-      <ChartCard title="Frecuencia de Operaciones de Importación" tab={tab} options={options} render={renderLine} minHeight={420} soloAnio />
+      <FrecuenciaAduanas tab={tab} options={options} />
 
       <ChartCard title="Benchmarking de Precio Promedio ($/M³) por Importador" tab={tab} options={options} render={renderBenchmark} minHeight={400} />
 
@@ -843,9 +962,8 @@ export default function DashboardSection({ canWrite }) {
 
       <div className="dash-st">Cadena de Suministro</div>
       <div className="dash-row">
-        <div className="dash-third"><ChartCard title="Market Share por Proveedor" tab={tab} options={options} render={(el, d) => d3Donut(el, d.share_proveedor || {}, 'M³')} /></div>
-        <div className="dash-third"><ChartCard title="Volumen por Procedencia" tab={tab} options={options} render={(el, d) => d3Donut(el, d.vol_procedencia || {}, 'M³')} /></div>
-        <div className="dash-third"><ChartCard title="U$S CIF por País de Origen" tab={tab} options={options} render={(el, d) => d3Donut(el, d.cif_pais || {}, 'U$S')} /></div>
+        <div className="dash-half"><ChartCard title="Market Share por Proveedor" tab={tab} options={options} render={(el, d) => d3Donut(el, d.share_proveedor || {}, 'M³')} /></div>
+        <div className="dash-half"><ChartCard title="Volumen por Procedencia" tab={tab} options={options} render={(el, d) => d3Donut(el, d.vol_procedencia || {}, 'M³')} /></div>
       </div>
     </div>
   );

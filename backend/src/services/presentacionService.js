@@ -317,6 +317,45 @@ export async function getDashboardData(query) {
     return { burbujas: rows };
   }
 
+  if (query.chart === 'frecuencia') {
+    const extra = 'importador IS NOT NULL';
+    const whereFull = where ? `${where} AND ${extra}` : `WHERE ${extra}`;
+    const [{ rows: moRows }, { rows: adRows }] = await Promise.all([
+      pool.query(`
+        SELECT importador AS empresa, EXTRACT(MONTH FROM fecha)::int AS mes, COUNT(*)::int AS ops
+        ${FROM} ${whereFull}
+        GROUP BY importador, mes ORDER BY importador, mes
+      `, values),
+      pool.query(`
+        SELECT importador AS empresa,
+          COALESCE(NULLIF(TRIM(aduana), ''), 'Sin aduana') AS aduana,
+          COUNT(*)::int AS ops
+        ${FROM} ${whereFull}
+        GROUP BY importador, aduana ORDER BY importador, aduana
+      `, values),
+    ]);
+
+    const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const monthly_ops = {};
+    for (const r of moRows) {
+      if (!monthly_ops[r.empresa]) {
+        monthly_ops[r.empresa] = Object.fromEntries(MONTHS.map((m) => [m, 0]));
+      }
+      const key = MONTHS[r.mes - 1];
+      if (key) monthly_ops[r.empresa][key] = parseInt(r.ops, 10);
+    }
+
+    const aduana_matrix = {};
+    const aduanaSet = new Set();
+    for (const r of adRows) {
+      if (!aduana_matrix[r.empresa]) aduana_matrix[r.empresa] = {};
+      aduana_matrix[r.empresa][r.aduana] = parseInt(r.ops, 10);
+      aduanaSet.add(r.aduana);
+    }
+
+    return { monthly_ops, aduana_matrix, aduanas: [...aduanaSet].sort() };
+  }
+
   const kpiSql = `${KPI_SELECT} ${FROM} ${where}`;
 
   const grp = (sel, order = 'valor DESC', limit = null) =>
