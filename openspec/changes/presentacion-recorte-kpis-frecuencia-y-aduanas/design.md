@@ -23,10 +23,10 @@ Ver `proposal.md` y los deltas de `presentacion-datos`. El panel vive en `fronte
 Se agrega un modo `chart=frecuencia` a `getDashboardData` que devuelve, con el mismo `where`:
 
 ```
-{ monthly_ops, aduana_matrix: { importador: { aduana: n } }, aduanas: [ ... ] }
+{ monthly_ops, weekly_ops, semanas, aduana_matrix: { importador: { aduana: n } }, aduanas: [ ... ] }
 ```
 
-`monthly_ops` reutiliza la consulta actual; `aduana_matrix` y `aduanas` salen de una segunda consulta `GROUP BY importador, aduana`. Así ambas vistas comparten un único período y un único `useDashboardData`.
+`monthly_ops` agrupa por `EXTRACT(MONTH)`; `weekly_ops` agrupa por `date_trunc('week', fecha)` (lunes) y `semanas` es la lista ordenada de inicios de semana; `aduana_matrix` y `aduanas` salen de una consulta `GROUP BY importador, aduana`. Todo con el mismo `where`. Así ambas vistas comparten un único período y un único `useDashboardData`.
 
 - Alternativa: un componente con dos `useDashboardData`. Descartada: duplicaría el fetch y podría desincronizar el período.
 - Alternativa: `chart=aduanas` separado. Descartada: obliga a dos requests con el mismo filtro.
@@ -48,7 +48,7 @@ Se seleccionan los top-N importadores por total de operaciones del período (N =
 
 `d3Line`/`renderLine` se reescriben: `x = d3.scalePoint` sobre los meses transcurridos, `y = d3.scaleLinear` de 0 al máximo de operaciones, una `d3.line` por importador coloreada con D3, puntos/path y una leyenda HTML o en SVG con los colores. Se eliminan las etiquetas de empresa sobre el eje X y los separadores punteados. `highlight` atenúa las líneas no resaltadas y engrosa la resaltada.
 
-- Se mantiene la regla de solo meses transcurridos (`maxMes` según año) y que el gráfico usa solo el año, sin restringirse por los meses (sigue con `soloAnio`).
+- Cuando no hay mes seleccionado (vista anual) se usan los meses transcurridos (`maxMes` según año); cuando hay un único mes se usa la vista de semanas.
 
 ### D5 — Tabla de calor
 
@@ -63,6 +63,13 @@ El contenedor mantiene `highlight` (importador). `onMouseEnter`/`onMouseLeave` e
 ### D7 — Recortes de KPIs y CIF
 
 `kpiList` pasa a tres entradas (Volumen Total, Nº Operaciones, Importadores) y la rejilla `.dash-kgrid` usa `repeat(auto-fit, minmax(...))` en vez de 4 columnas fijas. Se elimina el `ChartCard` "U$S CIF por País de Origen" y su tercio en `.dash-row`. El backend sigue calculando esos campos; no se toca.
+
+### D8 — Selección única de mes y vista por semanas
+
+El gráfico de Frecuencia deja de usar `soloAnio`: los meses ahora aplican. `CardFrame` recibe `singleMonth`, que hace que al pulsar un mes se reemplace la selección (y al pulsar el mes activo se deseleccione), con el mes anterior por defecto. `buildFrecuenciaModel` decide la vista: si hay exactamente un mes seleccionado y hay semanas, usa `weekly_ops` y el eje X son las semanas (etiqueta `dd Mmm - dd Mmm` con `weekLabel`, la misma de la tabla semanal); si no, usa `monthly_ops` y el eje X son los meses transcurridos. La tabla de aduanas comparte el mismo `filtro`, por lo que también se acota al mes elegido.
+
+- Alternativa: mantener `soloAnio` y calcular semanas aparte. Descartada: duplicaría el período y rompería la conexión gráfico ↔ tabla.
+- Las semanas usan `date_trunc('week')` (ISO, lunes) con el mismo `where` que la tabla semanal; las semanas de borde se extienden al mes vecino en la etiqueta.
 
 ## Risks / Trade-offs
 

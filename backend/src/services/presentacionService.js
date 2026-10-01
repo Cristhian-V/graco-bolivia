@@ -320,11 +320,18 @@ export async function getDashboardData(query) {
   if (query.chart === 'frecuencia') {
     const extra = 'importador IS NOT NULL';
     const whereFull = where ? `${where} AND ${extra}` : `WHERE ${extra}`;
-    const [{ rows: moRows }, { rows: adRows }] = await Promise.all([
+    const [{ rows: moRows }, { rows: wkRows }, { rows: adRows }] = await Promise.all([
       pool.query(`
         SELECT importador AS empresa, EXTRACT(MONTH FROM fecha)::int AS mes, COUNT(*)::int AS ops
         ${FROM} ${whereFull}
         GROUP BY importador, mes ORDER BY importador, mes
+      `, values),
+      pool.query(`
+        SELECT importador AS empresa,
+          to_char(date_trunc('week', fecha)::date, 'YYYY-MM-DD') AS semana,
+          COUNT(*)::int AS ops
+        ${FROM} ${whereFull}
+        GROUP BY importador, semana ORDER BY importador, semana
       `, values),
       pool.query(`
         SELECT importador AS empresa,
@@ -345,6 +352,14 @@ export async function getDashboardData(query) {
       if (key) monthly_ops[r.empresa][key] = parseInt(r.ops, 10);
     }
 
+    const weekly_ops = {};
+    const semanaSet = new Set();
+    for (const r of wkRows) {
+      if (!weekly_ops[r.empresa]) weekly_ops[r.empresa] = {};
+      weekly_ops[r.empresa][r.semana] = parseInt(r.ops, 10);
+      semanaSet.add(r.semana);
+    }
+
     const aduana_matrix = {};
     const aduanaSet = new Set();
     for (const r of adRows) {
@@ -353,7 +368,13 @@ export async function getDashboardData(query) {
       aduanaSet.add(r.aduana);
     }
 
-    return { monthly_ops, aduana_matrix, aduanas: [...aduanaSet].sort() };
+    return {
+      monthly_ops,
+      weekly_ops,
+      semanas: [...semanaSet].sort(),
+      aduana_matrix,
+      aduanas: [...aduanaSet].sort(),
+    };
   }
 
   const kpiSql = `${KPI_SELECT} ${FROM} ${where}`;

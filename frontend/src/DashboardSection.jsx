@@ -44,18 +44,18 @@ function procColor(i) {
 }
 
 function d3MultiLine(el, model, highlight) {
-  const { months, top, colorOf } = model;
-  const w = 1000, h = 420, m = { top: 10, right: 30, bottom: 40, left: 50 };
+  const { labels, top, colorOf } = model;
+  const w = 1000, h = 420, m = { top: 10, right: 30, bottom: 50, left: 50 };
   const { g, w: iw, h: ih } = svgEl(el, w, h, m);
 
-  if (!months.length || !top.length) {
+  if (!labels.length || !top.length) {
     g.append('text').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle')
       .attr('fill', '#9ca3af').style('font-size', '13px').text('Sin datos');
     return;
   }
 
   const maxV = d3.max(top, (s) => d3.max(s.values)) || 0;
-  const x = d3.scalePoint().domain(months).range([0, iw]).padding(0.5);
+  const x = d3.scalePoint().domain(labels).range([0, iw]).padding(0.5);
   const y = d3.scaleLinear().domain([0, Math.max(1, maxV)]).nice().range([ih, 0]);
 
   g.append('g').attr('class', 'grid')
@@ -66,10 +66,10 @@ function d3MultiLine(el, model, highlight) {
     .attr('fill', '#374151').style('font-size', '13px').style('text-anchor', 'middle').text('Operaciones');
 
   g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`)
-    .call(d3.axisBottom(x).tickFormat((d) => MONTH_CAP[d] || d))
+    .call(d3.axisBottom(x))
     .selectAll('text').attr('fill', '#6b7280').style('font-size', '12px');
 
-  const line = d3.line().x((d, i) => x(months[i])).y((d) => y(d)).curve(d3.curveLinear);
+  const line = d3.line().x((d, i) => x(labels[i])).y((d) => y(d)).curve(d3.curveLinear);
 
   top.forEach((s) => {
     const color = colorOf(s.name);
@@ -82,38 +82,56 @@ function d3MultiLine(el, model, highlight) {
       .attr('stroke-opacity', dim ? 0.15 : 1)
       .attr('d', line);
 
-    const pts = s.values.map((v, i) => ({ v, m: months[i] }));
+    const pts = s.values.map((v, i) => ({ v, label: labels[i] }));
     g.selectAll(null).data(pts).join('circle')
-      .attr('cx', (p, i) => x(months[i]))
+      .attr('cx', (p, i) => x(labels[i]))
       .attr('cy', (p) => y(p.v))
       .attr('r', isHi ? 5 : 3.5)
       .attr('fill', color).attr('stroke', '#fff').attr('stroke-width', 1.5)
       .attr('fill-opacity', dim ? 0.15 : 1)
       .on('mouseover', function (evt, p) {
-        tip.show(evt, `<strong>${sl(s.name, 35)}</strong><br>${MONTH_CAP[p.m] || p.m}: ${fmt(p.v)} ops`);
+        tip.show(evt, `<strong>${sl(s.name, 35)}</strong><br>${p.label}: ${fmt(p.v)} ops`);
       })
       .on('mouseout', function () { tip.hide(); });
   });
 }
 
-function buildFrecuenciaModel(monthly, nImp, anio) {
-  const now = new Date();
-  const y = parseInt(anio, 10);
-  let maxMes = 12;
-  if (!Number.isNaN(y)) {
-    if (y === now.getFullYear()) maxMes = Math.max(1, now.getMonth() + 1);
-    else if (y > now.getFullYear()) maxMes = 0;
+function buildFrecuenciaModel(data, nImp, filtro) {
+  const monthly = (data && data.monthly_ops) || {};
+  const weekly = (data && data.weekly_ops) || {};
+  const semanas = (data && data.semanas) || [];
+  const selected = (filtro && filtro.meses) || [];
+
+  const weeklyMode = selected.length === 1 && semanas.length > 0;
+  const source = weeklyMode ? weekly : monthly;
+
+  let keys;
+  let labels;
+  if (weeklyMode) {
+    keys = semanas.slice().sort();
+    labels = keys.map((s) => weekLabel(s));
+  } else {
+    const now = new Date();
+    const y = parseInt(filtro && filtro.anio, 10);
+    let maxMes = 12;
+    if (!Number.isNaN(y)) {
+      if (y === now.getFullYear()) maxMes = Math.max(1, now.getMonth() + 1);
+      else if (y > now.getFullYear()) maxMes = 0;
+    }
+    keys = MONTH_KEYS.slice(0, maxMes);
+    labels = keys.map((m) => MONTH_CAP[m] || m);
   }
-  const months = MONTH_KEYS.slice(0, maxMes);
-  const names = Object.keys(monthly || {}).sort((a, b) => a.localeCompare(b));
+
+  const names = Object.keys(source).sort((a, b) => a.localeCompare(b));
   const colorOf = (name) => procColor(Math.max(0, names.indexOf(name)));
   const totals = {};
-  names.forEach((n) => { totals[n] = months.reduce((s, m) => s + (monthly[n][m] || 0), 0); });
+  names.forEach((n) => { totals[n] = keys.reduce((s, k) => s + ((source[n] && source[n][k]) || 0), 0); });
   const top = names.slice()
     .sort((a, b) => (totals[b] - totals[a]) || a.localeCompare(b))
     .slice(0, Math.max(1, nImp))
-    .map((name) => ({ name, total: totals[name], values: months.map((m) => monthly[name][m] || 0) }));
-  return { months, names, colorOf, totals, top };
+    .map((name) => ({ name, total: totals[name], values: keys.map((k) => (source[name] && source[name][k]) || 0) }));
+
+  return { labels, keys, weeklyMode, names, colorOf, totals, top };
 }
 
 // ==================== D3 BENCHMARK ====================
@@ -504,9 +522,13 @@ function FilterPanel({ filters, onChange, options }) {
   );
 }
 
-function CardFrame({ title, open, onToggle, active, filtro, setFiltro, options, soloAnio, headerExtra, children }) {
+function CardFrame({ title, open, onToggle, active, filtro, setFiltro, options, soloAnio, singleMonth, headerExtra, children }) {
   function toggleMes(i) {
     const key = String(i);
+    if (singleMonth) {
+      setFiltro({ ...filtro, meses: filtro.meses.includes(key) ? [] : [key] });
+      return;
+    }
     const next = filtro.meses.includes(key)
       ? filtro.meses.filter((m) => m !== key)
       : [...filtro.meses, key];
@@ -728,11 +750,12 @@ function BubbleCard({ title, tab, options, ypfb, marcadores, canWrite, onAplicar
 
 function AduanaTable({ model, matrix, aduanas, highlight, setHighlight }) {
   const names = model.top.map((s) => s.name);
-  if (!names.length || !aduanas.length) return <p className="empty">Sin datos.</p>;
-
   const cell = (n, a) => (matrix[n] && matrix[n][a]) || 0;
-  const maxCell = Math.max(1, ...names.flatMap((n) => aduanas.map((a) => cell(n, a))));
-  const colTotals = aduanas.map((a) => names.reduce((s, n) => s + cell(n, a), 0));
+  const cols = aduanas.filter((a) => names.some((n) => cell(n, a) > 0));
+  if (!names.length || !cols.length) return <p className="empty">Sin datos.</p>;
+
+  const maxCell = Math.max(1, ...names.flatMap((n) => cols.map((a) => cell(n, a))));
+  const colTotals = cols.map((a) => names.reduce((s, n) => s + cell(n, a), 0));
   const grand = colTotals.reduce((s, v) => s + v, 0);
 
   return (
@@ -741,13 +764,13 @@ function AduanaTable({ model, matrix, aduanas, highlight, setHighlight }) {
         <thead>
           <tr>
             <th className="dash-aduana-name">Importador</th>
-            {aduanas.map((a) => <th key={a}>{a}</th>)}
+            {cols.map((a) => <th key={a}>{a}</th>)}
             <th className="tot">Total</th>
           </tr>
         </thead>
         <tbody>
           {names.map((n) => {
-            const rowTotal = aduanas.reduce((s, a) => s + cell(n, a), 0);
+            const rowTotal = cols.reduce((s, a) => s + cell(n, a), 0);
             return (
               <tr
                 key={n}
@@ -759,7 +782,7 @@ function AduanaTable({ model, matrix, aduanas, highlight, setHighlight }) {
                   <span className="dash-legend-sw" style={{ background: model.colorOf(n) }} />
                   {sl(n, 32)}
                 </td>
-                {aduanas.map((a) => {
+                {cols.map((a) => {
                   const v = cell(n, a);
                   const p = Math.round((v / maxCell) * 85);
                   return (
@@ -780,7 +803,7 @@ function AduanaTable({ model, matrix, aduanas, highlight, setHighlight }) {
         <tfoot>
           <tr>
             <td className="dash-aduana-name">Total</td>
-            {colTotals.map((v, i) => <td key={aduanas[i]}>{v}</td>)}
+            {colTotals.map((v, i) => <td key={cols[i]}>{v}</td>)}
             <td className="tot">{grand}</td>
           </tr>
         </tfoot>
@@ -796,13 +819,12 @@ function FrecuenciaAduanas({ tab, options }) {
   const [openChart, setOpenChart] = useState(false);
   const [openTable, setOpenTable] = useState(false);
   const [highlight, setHighlight] = useState(null);
-  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'frecuencia' }, true);
+  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'frecuencia' });
   const chartRef = useRef(null);
 
-  const monthly = (data && data.monthly_ops) || {};
   const matrix = (data && data.aduana_matrix) || {};
   const aduanas = (data && data.aduanas) || [];
-  const model = buildFrecuenciaModel(monthly, nImp, filtro.anio);
+  const model = buildFrecuenciaModel(data, nImp, filtro);
 
   useEffect(() => {
     if (chartRef.current) d3MultiLine(chartRef.current, model, highlight);
@@ -831,7 +853,7 @@ function FrecuenciaAduanas({ tab, options }) {
         filtro={filtro}
         setFiltro={setFiltro}
         options={options}
-        soloAnio
+        singleMonth
         headerExtra={cantidad}
       >
         {openChart && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
@@ -863,7 +885,7 @@ function FrecuenciaAduanas({ tab, options }) {
         filtro={filtro}
         setFiltro={setFiltro}
         options={options}
-        soloAnio
+        singleMonth
       >
         {openTable && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
         {error && <p className="error">{error}</p>}

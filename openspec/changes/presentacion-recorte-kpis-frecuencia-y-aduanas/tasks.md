@@ -26,4 +26,11 @@
 
 - [x] 5.1 Elevar el estado de filtros y de importador resaltado a un contenedor de dos tarjetas conectadas; verificar que gráfico y tabla comparten filtros y período
 - [x] 5.2 Implementar el resaltado de la línea al pasar el cursor por la fila de la tabla y por la entrada de la leyenda; verificar el resaltado en ambos sentidos y que se restablece al salir
-- [ ] 5.3 Verificación integral: abrir Presentación y comprobar KPIs acotados, ausencia del CIF por país, líneas por importador con leyenda y filtro de cantidad, y tabla de aduanas interactiva
+- [x] 5.3 Verificación integral: abrir Presentación y comprobar KPIs acotados, ausencia del CIF por país, líneas por importador con leyenda y filtro de cantidad, y tabla de aduanas interactiva
+- [x] 5.4 Ocultar en la tabla de aduanas las columnas cuyo total entre los importadores mostrados sea cero (verificado visualmente)
+
+## 6. Vista por semanas y selección única de mes
+
+- [x] 6.1 Backend: `chart=frecuencia` devuelve `weekly_ops` (importador → inicio de semana → operaciones) y `semanas` con `date_trunc('week')` y el mismo `where`; verificar que con un mes seleccionado la suma de semanas coincide con las operaciones de ese mes
+- [x] 6.2 Frontend: `CardFrame` con `singleMonth` y `buildFrecuenciaModel` que usa `weekly_ops` cuando hay un único mes y `monthly_ops` cuando no hay mes; verificar que el eje X muestra semanas Lun–Dom (`dd Mmm - dd Mmm`) al elegir un mes y meses al quitar la selección
+- [x] 6.3 Actualizar spec y design (Filtros y pestañas, requisito de Frecuencia con vista por semanas)
