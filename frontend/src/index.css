@@ -292,6 +292,22 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 .dash-volumen .cero { color: #9ca3af; }
 .dash-volumen .tot, .dash-volumen th.tot { font-weight: 700; border-left: 1px solid #e5e7eb; }
 
+.dash-ypfb { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+.dash-ypfb th, .dash-ypfb td { padding: 8px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid #e5e7eb; }
+.dash-ypfb thead th { font-size: 12px; color: #6b7280; font-weight: 600; }
+.dash-ypfb th:first-child, .dash-ypfb td:first-child { text-align: left; position: sticky; left: 0; background: #fff; z-index: 1; }
+.dash-ypfb th.left, .dash-ypfb td.left { text-align: left; }
+.dash-ypfb td.pfs { white-space: normal; max-width: 320px; }
+.dash-ypfb td.na { color: #9ca3af; }
+.dash-ypfb .sep { border-left: 1px solid #e5e7eb; }
+.dash-ypfb td.precio, .dash-ypfb th.precio { font-weight: 700; color: #111827; }
+.dash-ypfb tr.prov td { font-weight: 600; background: #f9fafb; border-top: 1px solid #d1d5db; }
+.dash-ypfb tr.prov td:first-child { background: #f9fafb; }
+.dash-ypfb tr.sub td { color: #6b7280; font-size: 12px; }
+.dash-ypfb tr.sub td.precio { color: #111827; font-weight: 600; }
+.dash-ypfb .rama { color: #9ca3af; margin-right: 6px; }
+.dash-ypfb tfoot td { font-weight: 700; border-top: 2px solid #d1d5db; }
+
 /* ============ Filtros por gráfico (cabecera minimizada) ============ */
 .dash-card-head {
   display: flex; align-items: center; justify-content: space-between;

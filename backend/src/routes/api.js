@@ -161,6 +161,12 @@ const COLUMNAS_EDITABLES = COLUMNAS_COMBUSTIBLES.filter((c) => c !== 'dim_dam');
 
 const COMBUSTIBLES_SELECT = ['id', 'nit', ...COLUMNAS_COMBUSTIBLES, 'tarifa_revisada', 'tarifa_revisada_valor'].join(', ');
 
+// Igual que COMBUSTIBLES_SELECT pero calificado, más los campos de proforma de YPFB.
+const COMBUSTIBLES_SELECT_JOIN = [
+  ...['id', 'nit', ...COLUMNAS_COMBUSTIBLES, 'tarifa_revisada', 'tarifa_revisada_valor'].map((c) => `c.${c}`),
+  'y.nro_proforma', 'y.premio', 'y.flete', 'y.precio_unitario',
+].join(', ');
+
 const PENDIENTE_SQL = `(
   tipo_cambio_trans IS NULL
   OR us_unitario > 5000
@@ -366,8 +372,10 @@ router.get('/combustibles', async (req, res, next) => {
 
     const offset = (pagina - 1) * limite;
     const { rows } = await pool.query(
-      `SELECT ${COMBUSTIBLES_SELECT} FROM combustibles ${where}
-       ORDER BY fecha DESC NULLS LAST, dim_dam LIMIT $${baseValues.length + 1} OFFSET $${baseValues.length + 2}`,
+      `SELECT ${COMBUSTIBLES_SELECT_JOIN}
+       FROM combustibles c LEFT JOIN ypfb_proformas y ON y.dim_dam = c.dim_dam
+       ${where}
+       ORDER BY c.fecha DESC NULLS LAST, c.dim_dam LIMIT $${baseValues.length + 1} OFFSET $${baseValues.length + 2}`,
       [...baseValues, limite, offset],
     );
 
@@ -472,7 +480,31 @@ router.put('/combustibles/:id', async (req, res, next) => {
 
     const { rows: full } = await pool.query('SELECT * FROM combustibles WHERE id = $1', [id]);
     await upsertDetalle(full[0]);
-    res.json(full[0]);
+
+    // Campos de proforma: solo para YPFB (NIT 1020269020).
+    let ypfb = null;
+    if (full[0].importador_nit === '1020269020') {
+      const curY = await pool.query('SELECT * FROM ypfb_proformas WHERE dim_dam = $1', [full[0].dim_dam]);
+      const prev = curY.rows[0] || {};
+      const pick = (k) => (Object.prototype.hasOwnProperty.call(body, k) ? body[k] : prev[k]);
+      const nro = pick('nro_proforma') == null ? null : String(pick('nro_proforma'));
+      await pool.query(
+        `INSERT INTO ypfb_proformas (dim_dam, nro_proforma, premio, flete, precio_unitario, actualizado_en)
+         VALUES ($1,$2,$3,$4,$5, now())
+         ON CONFLICT (dim_dam) DO UPDATE SET
+           nro_proforma = EXCLUDED.nro_proforma, premio = EXCLUDED.premio,
+           flete = EXCLUDED.flete, precio_unitario = EXCLUDED.precio_unitario,
+           actualizado_en = now()`,
+        [full[0].dim_dam, nro, r2Edit(pick('premio')), r2Edit(pick('flete')), r2Edit(pick('precio_unitario'))],
+      );
+      const { rows } = await pool.query(
+        'SELECT nro_proforma, premio, flete, precio_unitario FROM ypfb_proformas WHERE dim_dam = $1',
+        [full[0].dim_dam],
+      );
+      ypfb = rows[0] || null;
+    }
+
+    res.json({ ...full[0], ...(ypfb || {}) });
   } catch (e) {
     next(e);
   }

@@ -150,9 +150,14 @@ const CAMPOS_NUMERICOS = new Set([
   'cantidad_m3', 'tipo_cambio_dim', 'us_unitario', 'us_precio_marcador',
   'flete_total_usd', 'flete_total_bs', 'tipo_cambio_trans',
   'tarifa_flete_usd_m3', 'tarifa_flete_bob_m3',
+  'premio', 'flete', 'precio_unitario',
 ]);
 
 const CAMPOS_FECHA = new Set(['fecha', 'fecha_factura_trans']);
+
+const CAMPOS_YPFB = ['nro_proforma', 'premio', 'flete', 'precio_unitario'];
+const YPFB_NIT = '1020269020';
+const esYpfb = (c) => Boolean(c) && (c.importador_nit === YPFB_NIT || c.importador === 'YPFB');
 
 function toFechaStr(v) {
   if (!v) return '';
@@ -224,6 +229,7 @@ function CombustiblesSection({ canWrite }) {
   const [running, setRunning] = useState(false);
   const [docsId, setDocsId] = useState(null);
   const [editId, setEditId] = useState(null);
+  const [editYpfb, setEditYpfb] = useState(false);
   const [form, setForm] = useState({});
   const [editErr, setEditErr] = useState(null);
 
@@ -290,16 +296,28 @@ function CombustiblesSection({ canWrite }) {
     setDocsId((cur) => (cur === id ? null : id));
   }
 
-  function editar(c) {
+  async function editar(c) {
+    const yp = esYpfb(c);
+    const campos = yp ? [...CAMPOS_EDITABLES, ...CAMPOS_YPFB] : CAMPOS_EDITABLES;
     const init = {};
-    for (const col of CAMPOS_EDITABLES) {
+    for (const col of campos) {
       const v = c[col];
       if (CAMPOS_FECHA.has(col)) init[col] = toFechaStr(v);
       else init[col] = v == null ? '' : String(v);
     }
     setForm(init);
+    setEditYpfb(yp);
     setEditId(c.id);
     setEditErr(null);
+    if (yp && !init.nro_proforma) {
+      try {
+        const docs = await getDocumentos(c.id);
+        const fc = (docs || []).find((d) => d.tipo === 'CM-003');
+        if (fc && fc.num) setForm((f) => ({ ...f, nro_proforma: fc.num }));
+      } catch {
+        // sin factura comercial: se deja vacío
+      }
+    }
   }
 
   function setCampo(col, valor) {
@@ -411,7 +429,7 @@ function CombustiblesSection({ canWrite }) {
                           <td colSpan={COLUMNAS_COMBUSTIBLES.length + 2}>
                             <form onSubmit={guardarEdicion}>
                               <div className="comb-edit-grid">
-                                {CAMPOS_EDITABLES.map((col) => {
+                                {[...CAMPOS_EDITABLES, ...(editYpfb ? CAMPOS_YPFB : [])].map((col) => {
                                   const tipo = CAMPOS_FECHA.has(col) ? 'date'
                                     : CAMPOS_NUMERICOS.has(col) ? 'number' : 'text';
                                   return (

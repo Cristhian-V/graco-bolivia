@@ -1168,6 +1168,157 @@ function VolumenFronteraTable({ tab, options }) {
   );
 }
 
+// ==================== DIÉSEL YPFB (comparación por proveedor) ====================
+
+function YpfbComparacion({ tab, options }) {
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filtro, setFiltro] = useState(defaultFiltro);
+  const [open, setOpen] = useState(false);
+  const [incoterm, setIncoterm] = useState('');
+  const [suministro, setSuministro] = useState('todos');
+  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'diesel-ypfb' });
+
+  const rows = data && data.diesel_ypfb ? data.diesel_ypfb : [];
+  const incoterms = [...new Set(rows.map((r) => r.incoterm).filter(Boolean))].sort();
+  const suministros = [...new Set(rows.map((r) => r.pais_procedencia).filter(Boolean))].sort();
+  const inc = incoterm && incoterms.includes(incoterm) ? incoterm : (incoterms[0] || '');
+
+  const mesAct = parseInt((filtro.meses && filtro.meses[0]) || defaultFiltro().meses[0], 10);
+  const periodo = `${filtro.anio}-${String(mesAct).padStart(2, '0')}`;
+
+  const filtradas = rows.filter((r) => {
+    if (String(r.fecha || '').slice(0, 7) !== periodo) return false;
+    if (inc && r.incoterm !== inc) return false;
+    if (suministro !== 'todos' && r.pais_procedencia !== suministro) return false;
+    return true;
+  });
+
+  const acc = () => ({ vol: 0, premio: 0, flete: 0, precio: 0, pfs: [] });
+  const add = (a, d) => {
+    const v = d.volumen || 0;
+    a.vol += v;
+    a.premio += (d.premio || 0) * v;
+    a.flete += (d.flete || 0) * v;
+    a.precio += (d.precio_unitario || 0) * v;
+    a.pfs.push(d);
+  };
+  const prom = (a) => (a.vol ? { vol: a.vol, premio: a.premio / a.vol, flete: a.flete / a.vol, precio: a.precio / a.vol } : null);
+
+  const porProv = new Map();
+  const total = acc();
+  filtradas.forEach((d) => {
+    const p = d.proveedor || 'Sin proveedor';
+    if (!porProv.has(p)) porProv.set(p, { prov: p, a: acc(), sum: new Map() });
+    const t = porProv.get(p);
+    const pais = d.pais_procedencia || 'Sin país';
+    if (!t.sum.has(pais)) t.sum.set(pais, { pais, a: acc() });
+    add(t.a, d);
+    add(t.sum.get(pais).a, d);
+    add(total, d);
+  });
+  const out = [...porProv.values()].map((t) => ({
+    prov: t.prov,
+    p: prom(t.a),
+    pfs: t.a.pfs,
+    subs: [...t.sum.values()].map((s) => ({ pais: s.pais, p: prom(s.a), pfs: s.a.pfs })).filter((s) => s.p),
+  })).filter((r) => r.p).sort((a, b) => a.p.precio - b.p.precio);
+  const mercado = prom(total);
+
+  const pfsTxt = (pfs) => pfs.map((d) => d.nro_proforma).filter(Boolean).join(' · ') || '–';
+  const celdas = (p, key) => [
+    <td key={`v${key}`} className="sep">{fmt(p.vol, 0)}</td>,
+    <td key={`p${key}`}>{fmt(p.premio, 2)}</td>,
+    <td key={`f${key}`}>{fmt(p.flete, 2)}</td>,
+    <td key={`u${key}`} className="precio">{fmt(p.precio, 2)}</td>,
+  ];
+
+  const header = (
+    <div className="dash-frec-head">
+      <span className="dash-markers-label">Incoterm</span>
+      <div className="dash-seg">
+        {incoterms.map((i) => (
+          <button key={i} type="button" className={inc === i ? 'on' : ''} onClick={() => setIncoterm(i)}>{i}</button>
+        ))}
+      </div>
+      <span className="dash-markers-label">Suministro</span>
+      <div className="dash-seg">
+        <button type="button" className={suministro === 'todos' ? 'on' : ''} onClick={() => setSuministro('todos')}>Todos</button>
+        {suministros.map((s) => (
+          <button key={s} type="button" className={suministro === s ? 'on' : ''} onClick={() => setSuministro(s)}>{sl(s, 14)}</button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <CardFrame
+      title="Diésel YPFB · Comparación de precio unitario por proveedor (USD/m³)"
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      active={hasActiveFilters(filters)}
+      filtro={filtro}
+      setFiltro={setFiltro}
+      options={options}
+      singleMonth
+      headerExtra={header}
+    >
+      {open && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
+      {error && <p className="error">{error}</p>}
+      {loading && <p className="empty">Cargando…</p>}
+      {!loading && !error && out.length === 0 && (
+        <p className="empty">Sin entregas {inc || ''} en {MES_ABBR[mesAct - 1]} {filtro.anio}.</p>
+      )}
+      {out.length > 0 && (
+        <div className="table-scroll">
+          <table className="dash-ypfb">
+            <thead>
+              <tr>
+                <th>Proveedor{suministro === 'todos' ? ' / punto de suministro' : ''}</th>
+                <th className="left">N.º proforma</th>
+                <th className="sep">Volumen (m³)</th>
+                <th>Premio (USD/m³)</th>
+                <th>Flete (USD/m³)</th>
+                <th className="precio">Precio unitario {inc} (USD/m³)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {out.map((r) => (
+                <Fragment key={r.prov}>
+                  <tr className="prov">
+                    <td>{r.prov}</td>
+                    <td className="left na">
+                      {suministro === 'todos'
+                        ? `${r.subs.length} punto${r.subs.length === 1 ? '' : 's'} · ${r.pfs.length} proforma${r.pfs.length === 1 ? '' : 's'}`
+                        : pfsTxt(r.pfs)}
+                    </td>
+                    {celdas(r.p, `p${r.prov}`)}
+                  </tr>
+                  {suministro === 'todos' && r.subs.map((s) => (
+                    <tr className="sub" key={s.pais}>
+                      <td><span className="rama">└</span>{s.pais}</td>
+                      <td className="left pfs">{pfsTxt(s.pfs)}</td>
+                      {celdas(s.p, `s${r.prov}${s.pais}`)}
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+            {mercado && (
+              <tfoot>
+                <tr>
+                  <td>Promedio YPFB · {inc}</td>
+                  <td />
+                  {celdas(mercado, 'tot')}
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+    </CardFrame>
+  );
+}
+
 export default function DashboardSection({ canWrite }) {
   const [tab, setTab] = useState('diesel');
   const [options, setOptions] = useState(null);
@@ -1234,6 +1385,9 @@ export default function DashboardSection({ canWrite }) {
       <div className="dash-st">Logística</div>
       <TarifasTable tab={tab} options={options} unidad="usd" title="Tarifa Flete Prom. por Tramo (USD/m³)" />
       <TarifasTable tab={tab} options={options} unidad="bs" title="Tarifa Flete Prom. por Tramo (Bs/m³)" />
+
+      <div className="dash-st">Diésel YPFB</div>
+      <YpfbComparacion tab={tab} options={options} />
 
       <div className="dash-st">Análisis por Importador</div>
       <VolumenFronteraTable tab={tab} options={options} />

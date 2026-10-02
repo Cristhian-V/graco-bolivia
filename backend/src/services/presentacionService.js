@@ -383,6 +383,43 @@ export async function getVolumenFrontera(query) {
   };
 }
 
+// ==================== DIÉSEL YPFB (comparación por proveedor) ====================
+
+export async function getDieselYpfb(query) {
+  const anio = parseInt(query.anio, 10);
+  const conditions = ["d.importador_nit = '1020269020'", "d.producto = 'DIESEL'"];
+  const values = [];
+  let i = 1;
+  if (Number.isInteger(anio)) {
+    conditions.push(`EXTRACT(YEAR FROM d.fecha)::int = $${i}`);
+    values.push(anio);
+    i += 1;
+  }
+  const { rows } = await pool.query(`
+    SELECT d.dim_dam, d.proveedor, d.pais_procedencia, d.incoterm, d.fecha,
+      d.cantidad_m3 AS volumen,
+      y.nro_proforma, y.premio, y.flete, y.precio_unitario
+    FROM detalles d
+    LEFT JOIN ypfb_proformas y ON y.dim_dam = d.dim_dam
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY d.proveedor, d.pais_procedencia, d.fecha
+  `, values);
+  return {
+    diesel_ypfb: rows.map((r) => ({
+      dim_dam: r.dim_dam,
+      proveedor: r.proveedor,
+      pais_procedencia: r.pais_procedencia,
+      incoterm: r.incoterm,
+      fecha: r.fecha,
+      volumen: r.volumen != null ? Number(r.volumen) : null,
+      nro_proforma: r.nro_proforma,
+      premio: r.premio != null ? Number(r.premio) : null,
+      flete: r.flete != null ? Number(r.flete) : null,
+      precio_unitario: r.precio_unitario != null ? Number(r.precio_unitario) : null,
+    })),
+  };
+}
+
 export async function getDashboardData(query) {
   const { where, values } = buildWhere(query);
   const FROM = 'FROM detalles d';
@@ -483,6 +520,10 @@ export async function getDashboardData(query) {
 
   if (query.chart === 'volumen-frontera') {
     return getVolumenFrontera(query);
+  }
+
+  if (query.chart === 'diesel-ypfb') {
+    return getDieselYpfb(query);
   }
 
   const kpiSql = `${KPI_SELECT} ${FROM} ${where}`;

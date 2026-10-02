@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diésel YPFB por Proveedor</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --accent:#2a78d6;
+    --good:#1a7f4b; --bad:#b4461b; --bar:#c9d9ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --accent:#3987e5;
+      --good:#3fb27f; --bad:#f08a5d; --bar:#2b3e57;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --accent:#3987e5;
+    --good:#3fb27f; --bad:#f08a5d; --bar:#2b3e57;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1480px; margin:0 auto; padding:24px 16px 48px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px 24px; }
+  .top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  h1 { font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); margin:0; }
+  .filtros { display:flex; flex-wrap:wrap; gap:10px 20px; align-items:center; margin-bottom:10px; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .lbl { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  select, button { font:inherit; font-size:13px; color:var(--ink-2); background:var(--surface); border:1px solid var(--axis); border-radius:6px; padding:4px 10px; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid var(--axis); border-radius:8px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; padding:4px 14px; }
+  .seg button + button { border-left:1px solid var(--axis); }
+  .seg button.on, .mes.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .mes:disabled { opacity:.4; cursor:default; }
+  .resumen { color:var(--ink-2); font-size:13px; margin:4px 0 12px; }
+  .resumen b { color:var(--ink); }
+
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:10px 12px; text-align:right; white-space:nowrap; }
+  thead th { font-size:12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--axis); }
+  tbody td { border-bottom:1px solid var(--grid); }
+  th:first-child, td:first-child { text-align:left; position:sticky; left:0; background:var(--surface); z-index:1; }
+  .sep { border-left:1px solid var(--grid); }
+  td.na { color:var(--muted); }
+  th.left, td.left { text-align:left; }
+  td.pfs { white-space:normal; min-width:240px; max-width:300px; line-height:1.7; }
+  .pfnum { display:inline-block; margin-right:12px; font-family:ui-monospace,Consolas,monospace; font-size:12px; color:var(--ink-2); }
+  th.precio, td.precio { font-weight:700; color:var(--ink); }
+  tr.proveedor td { font-weight:600; background:var(--page); border-top:1px solid var(--axis); }
+  tr.proveedor td:first-child { background:var(--page); }
+  tr.sub td { color:var(--ink-2); font-size:13px; padding-top:7px; padding-bottom:7px; }
+  tr.sub td.precio { color:var(--ink); font-weight:600; }
+  tr.sub td:first-child { padding-left:22px; }
+  .rama { color:var(--muted); margin-right:6px; }
+  tfoot td { font-weight:700; border-top:2px solid var(--axis); }
+  .pie { margin-top:12px; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="top">
+      <h1>Diésel YPFB · Comparación de precio unitario por proveedor (<span class="u"></span>)</h1>
+      <div class="controls">
+        <span class="lbl">Año</span>
+        <select id="anio"><option>2026</option></select>
+      </div>
+    </div>
+    <div class="filtros">
+      <div class="controls"><span class="lbl">Incoterm</span><div class="seg" id="seg-inc"></div></div>
+      <div class="controls"><span class="lbl">Suministro</span><div class="seg" id="seg-sum"></div></div>    </div>
+    <div class="controls" id="meses" style="margin-bottom:8px"></div>
+    <p class="resumen" id="resumen"></p>
+
+    <div class="table-wrap"><table id="tabla"></table></div>
+
+    <p class="pie">Solo importaciones de diésel de YPFB. Valores en <b class="u"></b>, promedio ponderado por volumen.
+      Precio unitario = precio de referencia + premio + flete. Se comparan solo entregas del mes, Incoterm y punto de suministro seleccionados.
+      Los proveedores aparecen del precio unitario más bajo al más alto. Con «Todos» los suministros, cada proveedor muestra su promedio y, debajo, el detalle por país.</p>
+  </div>
+</main>
+
+<script>
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const UNIDAD = 'USD/m³';   // confirmado: los precios de diésel de YPFB vienen en USD/m³
+const INCOTERMS = ['DAP','DPU','FCA'];
+const SUMINISTROS = ['Paraguay','Perú','Argentina','Brasil','Chile'];   // país del punto de suministro
+
+// ===== Datos de ejemplo (TODO inventado: proveedores, precios, volúmenes) =====
+// En producción la API debería devolver SOLO diésel de YPFB:
+//   [{ proforma, proveedor, fecha:'YYYY-MM-DD', incoterm:'DAP'|'FCA'|'DPU', suministro:'Paraguay'|'Perú'|..., volumen_m3, precio_ref, premio, flete }, ...]   (en UNIDAD)
+//   proforma = número del documento, para poder relacionar cada dato con su proforma
+const PROVEEDORES = ['PROVEEDOR A','PROVEEDOR B','PROVEEDOR C','PROVEEDOR D','PROVEEDOR E','PROVEEDOR F'];
+const DATOS = [];
+PROVEEDORES.forEach((proveedor, i) => {
+  INCOTERMS.forEach((incoterm, j) => {
+    if ((i + j) % 4 === 3) return;                    // no todos los proveedores operan con todos los Incoterms
+    for (let m = 0; m <= 8; m++) {
+      if ((i * 3 + j + m) % 7 === 6) continue;          // algunos meses sin entregas
+      const ref = 640 + m * 6 + ((m * 7) % 5) * 9;       // precio de referencia del mes
+      const premio = 28 + i * 3 + j * 2 + ((i + m * 3) % 6) * 1.5;
+      // cada proveedor entrega desde dos puntos de suministro; el flete cambia según la distancia
+      [(i + j) % 5, (i + j + 2) % 5].forEach((k, n) => {
+        const flete = incoterm === 'FCA' ? 0 : 52 + k * 4 + i * 2 + (incoterm === 'DPU' ? 6 : 0) + ((i * 2 + m) % 5) * 2;
+        const proforma = `PF-2026-${String(m+1).padStart(2,'0')}${i+1}${j+1}${k+1}`;
+        DATOS.push({ proforma, proveedor, fecha:`2026-${String(m+1).padStart(2,'0')}-15`, incoterm, suministro: SUMINISTROS[k],
+                     volumen_m3: (8000 + i * 1500 + m * 300) * (n ? 0.4 : 0.6), precio_ref: ref, premio: premio + k * 0.5, flete });
+      });
+    }
+  });
+});
+// ======================================================================
+DATOS.forEach(d => d.mes = +d.fecha.slice(5,7) - 1);
+
+const ultimoMes = Math.max(...DATOS.map(d => d.mes));
+const estado = { inc:'DAP', sum:'todos', mes: ultimoMes };
+const nf = new Intl.NumberFormat('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const nf0 = new Intl.NumberFormat('en-US', { maximumFractionDigits:0 });
+document.querySelectorAll('.u').forEach(e => e.textContent = UNIDAD);
+
+// acumulador ponderado por volumen
+const acc = () => ({ vol:0, ref:0, premio:0, flete:0 });
+const add = (a, d) => { a.vol += d.volumen_m3; a.ref += d.precio_ref * d.volumen_m3; a.premio += d.premio * d.volumen_m3; a.flete += d.flete * d.volumen_m3; };
+const prom = a => a && a.vol ? { ref: a.ref / a.vol, premio: a.premio / a.vol, flete: a.flete / a.vol, precio: (a.ref + a.premio + a.flete) / a.vol, vol: a.vol } : null;
+
+function botones(id, opciones, clave, cls = '') {
+  const cont = document.getElementById(id); cont.innerHTML = '';
+  opciones.forEach(o => {
+    const b = document.createElement('button');
+    b.textContent = o.label; b.className = cls + (o.id === estado[clave] ? ' on' : '');
+    b.disabled = !!o.disabled;
+    b.onclick = () => { estado[clave] = o.id; render(); };
+    cont.appendChild(b);
+  });
+}
+
+const listaPfs = pfs => pfs.map(d =>
+  `<span class="pfnum" title="${d.proforma} · ${d.incoterm} · ${d.suministro} · ${d.fecha} · ${nf.format(d.volumen_m3)} m³ · ${nf.format(d.precio_ref + d.premio + d.flete)} ${UNIDAD}">${d.proforma}</span>`).join('');
+
+function render() {
+  botones('seg-inc', INCOTERMS.map(i => ({ id:i, label:i })), 'inc');
+  botones('seg-sum', [{ id:'todos', label:'Todos' }, ...SUMINISTROS.map(p => ({ id:p, label:p }))], 'sum');
+  botones('meses', MESES.map((m, i) => ({ id:i, label:m, disabled: i > ultimoMes })), 'mes', 'mes');
+
+  const filas = DATOS.filter(d => d.mes === estado.mes && d.incoterm === estado.inc &&
+                                  (estado.sum === 'todos' || d.suministro === estado.sum));
+  // proveedor → promedio + sub-filas por punto de suministro
+  const porProveedor = new Map(), total = acc();
+  filas.forEach(d => {
+    if (!porProveedor.has(d.proveedor)) porProveedor.set(d.proveedor, { a: acc(), pfs: [], sum: new Map() });
+    const t = porProveedor.get(d.proveedor);
+    if (!t.sum.has(d.suministro)) t.sum.set(d.suministro, { a: acc(), pfs: [] });
+    const su = t.sum.get(d.suministro);
+    add(t.a, d); add(su.a, d); add(total, d); t.pfs.push(d); su.pfs.push(d);
+  });
+
+  const porPrecio = (a, b) => a.p.precio - b.p.precio;
+  const rows = [...porProveedor].map(([proveedor, t]) => ({
+    proveedor, t, p: prom(t.a),
+    subs: [...t.sum].map(([pais, su]) => ({ pais, su, p: prom(su.a) })).sort(porPrecio),
+  }));
+  rows.sort(porPrecio);   // del más barato al más caro
+
+  // unidades comparables: proveedor + país (con «Todos») o proveedor (con un país elegido)
+  const conSubs = estado.sum === 'todos';
+  const unidades = conSubs ? rows.flatMap(r => r.subs.map(s => ({ ...s, proveedor: r.proveedor }))) : rows;
+  const mejor = unidades.length ? unidades.reduce((a, b) => (b.p.precio < a.p.precio ? b : a)) : null;
+  const mercado = prom(total);
+
+  const celdas = (p, titulo) =>
+    `<td class="sep">${nf0.format(p.vol)}</td><td>${nf.format(p.premio)}</td><td>${nf.format(p.flete)}</td>` +
+    `<td class="precio" title="${titulo}: ${nf.format(p.precio)} ${UNIDAD} · ${nf.format(p.vol)} m³">${nf.format(p.precio)}</td>`;
+
+  const cols = 6;
+  let html = `<thead><tr><th>Proveedor${conSubs ? ' / punto de suministro' : ''}</th><th class="left">N.º proforma</th>` +
+    `<th class="sep">Volumen (m³)</th><th>Premio (${UNIDAD})</th><th>Flete (${UNIDAD})</th>` +
+    `<th class="precio">Precio unitario ${estado.inc} (${UNIDAD})</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    const pfCelda = conSubs
+      ? `<td class="left na">${r.subs.length} punto${r.subs.length === 1 ? '' : 's'} de suministro · ${r.t.pfs.length} proforma${r.t.pfs.length === 1 ? '' : 's'}</td>`
+      : `<td class="left pfs">${listaPfs(r.t.pfs)}</td>`;
+    html += `<tr class="proveedor"><td>${r.proveedor}${conSubs ? '' : ` <span class="na">· ${estado.sum}</span>`}</td>${pfCelda}` +
+            `${celdas(r.p, `${r.proveedor} · ${estado.inc}`)}</tr>`;
+    if (conSubs) r.subs.forEach(s => {
+      html += `<tr class="sub"><td><span class="rama">└</span>${s.pais}</td><td class="left pfs">${listaPfs(s.su.pfs)}</td>` +
+              `${celdas(s.p, `${r.proveedor} · ${s.pais} · ${estado.inc}`)}</tr>`;
+    });
+  });
+
+  const nMes = `${MESES[estado.mes]} ${document.getElementById('anio').value}`;
+  const nSum = estado.sum === 'todos' ? 'todos los suministros' : estado.sum;
+  if (!rows.length) {
+    html += `<tr><td colspan="${cols}" class="na" style="text-align:center">Sin entregas ${estado.inc} en ${nMes}${estado.sum === 'todos' ? '' : ' desde ' + estado.sum}.</td></tr></tbody>`;
+  } else {
+    html += `</tbody><tfoot><tr><td>Promedio YPFB · ${estado.inc}</td><td></td>` +
+      `<td class="sep">${nf0.format(mercado.vol)}</td><td>${nf.format(mercado.premio)}</td><td>${nf.format(mercado.flete)}</td>` +
+      `<td class="precio">${nf.format(mercado.precio)}</td></tr></tfoot>`;
+  }
+  document.getElementById('tabla').innerHTML = html;
+
+  const res = document.getElementById('resumen');
+  if (!rows.length) { res.textContent = `${nMes} · ${estado.inc} · ${nSum} · sin entregas`; return; }
+  const peor = unidades.reduce((a, b) => (b.p.precio > a.p.precio ? b : a));
+  const nombre = u => `${u.proveedor}${u.pais ? ' (' + u.pais + ')' : ''}`;
+  res.innerHTML = `${nMes} · <b>${estado.inc}</b> · ${nSum} · ${rows.length} proveedor${rows.length === 1 ? '' : 'es'} · ${filas.length} proforma${filas.length === 1 ? '' : 's'}` +
+    ` · Mejor precio: <b>${nombre(mejor)}</b> ${nf.format(mejor.p.precio)} ${UNIDAD}` +
+    (unidades.length > 1 ? ` · Brecha con el más caro (${nombre(peor)}): <b>${nf.format(peor.p.precio - mejor.p.precio)}</b> ${UNIDAD}` : '');
+}
+render();
+</script>
+</body>
+</html>
