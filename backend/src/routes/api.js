@@ -4,7 +4,7 @@ import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { pool } from '../db.js';
 import { executeManifiestosRun } from '../services/manifiestosService.js';
-import { executeCombustiblesRun } from '../services/combustiblesService.js';
+import { executeCombustiblesRun, backfillManifiestos } from '../services/combustiblesService.js';
 import { getDashboardFilters, getDashboardKpis, getDashboardData, seedDetallesDesdeExcel, upsertDetalle, getMarcadores, setMarcadores } from '../services/presentacionService.js';
 import { actualizarTipoCambioRango, sincronizarTipoCambioCombustibles } from '../services/tipoCambioService.js';
 import {
@@ -521,6 +521,14 @@ router.post('/combustibles/:id/ignorar', async (req, res, next) => {
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Registro no encontrado' });
     res.json(rows[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/combustibles/manifiestos-backfill', async (req, res, next) => {
+  try {
+    res.json(await backfillManifiestos());
   } catch (e) {
     next(e);
   }

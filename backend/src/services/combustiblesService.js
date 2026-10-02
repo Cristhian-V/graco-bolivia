@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { login } from '../scraper/auth.js';
 import { getDeclaracionPorNumero, getDatosMercancia, downloadDimPdf } from '../scraper/declaraciones.js';
@@ -236,10 +236,20 @@ async function downloadDocumentos(token, dim, dimDam) {
 
   // 2. Documentos de soporte (L. Documentos): se registran con su URL pública de
   //    la aduana (`b-oce/rest/downloadFile/{id}`), sin descargar el archivo.
+  //    Del manifiesto de carga (TR-007) se registra solo el primero por declaración.
+  let manifiestoGuardado = (await pool.query(
+    "SELECT 1 FROM documentos_despacho WHERE dim_dam = $1 AND tipo = 'TR-007'",
+    [dimDam],
+  )).rows.length > 0;
+
   for (const doc of docSop) {
     const arc = doc?.arc;
     if (!arc?.id) continue;
     const tipo = doc?.tip?.cod ?? null;
+    if (tipo === 'TR-007') {
+      if (manifiestoGuardado) continue;
+      manifiestoGuardado = true;
+    }
     const numDoc = doc?.camDin?.num ?? doc?.camDin?.nro ?? null;
     if (await documentoSaved(dimDam, tipo, numDoc)) continue;
     const nombreArchivo = arc.nom ? sanitize(arc.nom) : `${tipo}_${sanitize(numDoc || '')}.pdf`;
@@ -251,6 +261,49 @@ async function downloadDocumentos(token, dim, dimDam) {
       [dimDam, tipo, doc?.tip?.des ?? null, numDoc, doc?.camDin?.emi ?? null, nombreArchivo, url],
     );
   }
+}
+
+// Completa el manifiesto de carga (TR-007) de los combustibles que no lo tienen,
+// usando el primer manifiesto vinculado a su declaración.
+export async function backfillManifiestos() {
+  const { rows } = await pool.query(`
+    SELECT c.dim_dam FROM combustibles c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM documentos_despacho d WHERE d.dim_dam = c.dim_dam AND d.tipo = 'TR-007'
+    )
+  `);
+  let copiados = 0;
+  let sinManifiesto = 0;
+  let errores = 0;
+  for (const c of rows) {
+    const { rows: ms } = await pool.query(
+      `SELECT num_man, nombre_archivo, ruta_archivo FROM manifiestos
+       WHERE di = $1 OR dam = $1 ORDER BY correlativo LIMIT 1`,
+      [c.dim_dam],
+    );
+    if (ms.length === 0) { sinManifiesto += 1; continue; }
+    const m = ms[0];
+    if (!m.ruta_archivo) { errores += 1; continue; }
+    const src = path.join(config.downloadsDir, m.ruta_archivo);
+    if (!existsSync(src)) { errores += 1; continue; }
+    try {
+      const nombre = m.nombre_archivo || `MIC_${sanitize(c.dim_dam)}.pdf`;
+      const rutaRel = path.join(c.dim_dam, nombre);
+      mkdirSync(path.dirname(path.join(config.documentosDespachoDir, rutaRel)), { recursive: true });
+      copyFileSync(src, path.join(config.documentosDespachoDir, rutaRel));
+      await pool.query(
+        `INSERT INTO documentos_despacho (dim_dam, tipo, tipo_des, num, emi, nombre_archivo, ruta_archivo)
+         VALUES ($1, 'TR-007', $2, $3, NULL, $4, $5)
+         ON CONFLICT (dim_dam, tipo, num) DO NOTHING`,
+        [c.dim_dam, 'MANIFIESTO INTERNACIONAL DE CARGA / DECLARACION DE TRÁNSITO ADUANERO (MIC/DTA)', m.num_man, nombre, rutaRel],
+      );
+      copiados += 1;
+    } catch (e) {
+      errores += 1;
+      console.error(`[backfill-manifiestos] error ${c.dim_dam}: ${e.message}`);
+    }
+  }
+  return { total: rows.length, copiados, sinManifiesto, errores };
 }
 
 export async function runCombustibles({ runId, nits, desde, hasta }) {
