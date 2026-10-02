@@ -283,6 +283,106 @@ export async function getDashboardKpis(query) {
   return rows[0] || {};
 }
 
+// ==================== TARIFAS POR TRAMO (comparativo mes vs anterior) ====================
+
+function condicionTipo(tipo) {
+  if (tipo === 'ypfb') return "importador = 'YPFB'";
+  if (tipo === 'privado') return "importador <> 'YPFB'";
+  return null;
+}
+
+export async function getTarifasTramo(query) {
+  const unidad = query.unidad === 'bs' ? 'bs' : 'usd';
+  const costoCol = unidad === 'bs' ? 'flete_total_bs' : 'flete_total_usd';
+  const anio = parseInt(query.anio, 10);
+  const meses = splitLista(query.mes).map((m) => parseInt(m, 10)).filter((n) => Number.isInteger(n));
+  const mes = meses.length ? meses[0] : null;
+  if (!Number.isInteger(anio) || !mes) return { tarifas: [] };
+
+  let antAnio = anio;
+  let antMes = mes - 1;
+  if (antMes < 1) { antMes = 12; antAnio -= 1; }
+  const periodoAct = `${anio}-${String(mes).padStart(2, '0')}`;
+  const periodoAnt = `${antAnio}-${String(antMes).padStart(2, '0')}`;
+
+  const conditions = [
+    `to_char(fecha, 'YYYY-MM') = ANY($2::text[])`,
+    `${costoCol} > 0`,
+    `cantidad_m3 > 0`,
+    `NULLIF(tramo_flete, '') IS NOT NULL`,
+  ];
+  const values = [periodoAct, [periodoAct, periodoAnt]];
+  let i = 3;
+
+  const productos = splitLista(query.producto);
+  if (productos.length) { conditions.push(`producto = ANY($${i}::text[])`); values.push(productos); i += 1; }
+  const tipo = condicionTipo(query.tipo);
+  if (tipo) conditions.push(tipo);
+
+  const sql = `
+    SELECT tramo_flete AS tramo,
+      CASE WHEN to_char(fecha, 'YYYY-MM') = $1 THEN 'act' ELSE 'ant' END AS per,
+      SUM(${costoCol}) AS costo,
+      SUM(cantidad_m3) AS vol
+    FROM detalles d
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY tramo_flete, per`;
+  const { rows } = await pool.query(sql, values);
+
+  const map = new Map();
+  let actCosto = 0;
+  let actVol = 0;
+  let antCosto = 0;
+  let antVol = 0;
+  for (const r of rows) {
+    if (!map.has(r.tramo)) map.set(r.tramo, { tramo: r.tramo, ant: null, act: null });
+    const costo = Number(r.costo);
+    const vol = Number(r.vol);
+    const val = vol > 0 ? Number((costo / vol).toFixed(2)) : null;
+    if (r.per === 'act') { map.get(r.tramo).act = val; actCosto += costo; actVol += vol; } else { map.get(r.tramo).ant = val; antCosto += costo; antVol += vol; }
+  }
+  const general = {
+    act: actVol > 0 ? Number((actCosto / actVol).toFixed(2)) : null,
+    ant: antVol > 0 ? Number((antCosto / antVol).toFixed(2)) : null,
+  };
+  return { tarifas: [...map.values()], general };
+}
+
+export async function getVolumenFrontera(query) {
+  const anio = parseInt(query.anio, 10);
+  const meses = splitLista(query.mes).map((m) => parseInt(m, 10)).filter((n) => Number.isInteger(n));
+
+  const conditions = [
+    'importador IS NOT NULL',
+    'aduana IS NOT NULL',
+    'cantidad_m3 IS NOT NULL',
+  ];
+  const values = [];
+  let i = 1;
+  if (Number.isInteger(anio)) { conditions.push(`EXTRACT(YEAR FROM fecha)::int = $${i}`); values.push(anio); i += 1; }
+  if (meses.length) { conditions.push(`EXTRACT(MONTH FROM fecha)::int = ANY($${i}::int[])`); values.push(meses); i += 1; }
+  const productos = splitLista(query.producto);
+  if (productos.length) { conditions.push(`producto = ANY($${i}::text[])`); values.push(productos); i += 1; }
+  const tipo = condicionTipo(query.tipo);
+  if (tipo) conditions.push(tipo);
+  for (const [q, col] of [['importador', 'importador'], ['proveedor', 'proveedor'], ['procedencia', 'pais_procedencia'], ['aduana', 'aduana']]) {
+    const items = splitLista(query[q]);
+    if (items.length) { conditions.push(`${col} = ANY($${i}::text[])`); values.push(items); i += 1; }
+  }
+
+  const { rows } = await pool.query(`
+    SELECT importador, COALESCE(NULLIF(TRIM(aduana), ''), 'Sin aduana') AS aduana,
+      ROUND(SUM(cantidad_m3)::numeric, 2) AS volumen
+    FROM detalles d
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY importador, aduana
+    HAVING SUM(cantidad_m3) > 0
+  `, values);
+  return {
+    volumen_frontera: rows.map((r) => ({ importador: r.importador, aduana: r.aduana, volumen: Number(r.volumen) })),
+  };
+}
+
 export async function getDashboardData(query) {
   const { where, values } = buildWhere(query);
   const FROM = 'FROM detalles d';
@@ -375,6 +475,14 @@ export async function getDashboardData(query) {
       aduana_matrix,
       aduanas: [...aduanaSet].sort(),
     };
+  }
+
+  if (query.chart === 'tarifas') {
+    return getTarifasTramo(query);
+  }
+
+  if (query.chart === 'volumen-frontera') {
+    return getVolumenFrontera(query);
   }
 
   const kpiSql = `${KPI_SELECT} ${FROM} ${where}`;

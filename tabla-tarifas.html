@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarifa de Flete</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --accent:#2a78d6;
+    --up:#d03b3b; --down:#006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --accent:#3987e5;
+      --up:#e66767; --down:#0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --accent:#3987e5;
+    --up:#e66767; --down:#0ca30c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px 24px; }
+  .top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+  h1 { font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); margin:0; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  select, button { font:inherit; font-size:13px; color:var(--ink-2); background:var(--surface); border:1px solid var(--axis); border-radius:6px; padding:4px 10px; cursor:pointer; }
+  .seg { display:inline-flex; border:1px solid var(--axis); border-radius:8px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; padding:4px 12px; }
+  .seg button + button { border-left:1px solid var(--axis); }
+  .seg button.on { background:var(--accent); color:#fff; font-weight:600; }
+
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:10px 12px; text-align:right; white-space:nowrap; }
+  thead th { font-size:12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--axis); }
+  thead .unidad th { font-size:11px; color:var(--muted); font-weight:400; border-bottom:none; padding-bottom:0; letter-spacing:.04em; }
+  tbody td { border-bottom:1px solid var(--grid); }
+  th:first-child, td:first-child { text-align:left; position:sticky; left:0; background:var(--surface); z-index:1; }
+  .flecha { color:var(--muted); margin:0 6px; }
+  td.na { color:var(--muted); }
+  .mes { padding:4px 10px; }
+  .mes.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .mes:disabled { opacity:.4; cursor:default; }
+  .resumen { color:var(--ink-2); font-size:13px; margin:4px 0 12px; }
+  table { max-width:760px; }
+  th.act, td.act { font-weight:700; color:var(--ink); }
+  td.prev { color:var(--ink-2); }
+  .sep { border-left:1px solid var(--grid); }
+  td.up { color:var(--up); } td.down { color:var(--down); } td.eq { color:var(--muted); }
+  tfoot td { font-weight:700; border-top:2px solid var(--axis); }
+  .pie { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-top:12px; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="top">
+      <h1>Tarifa flete promedio por tramo · Bs/m³</h1>
+      <div class="controls">
+        <div class="seg" id="seg-tipo"></div>
+        <select id="anio"><option>2026</option></select>
+      </div>
+    </div>
+    <div class="controls" id="meses" style="margin-bottom:8px"></div>
+    <p class="resumen" id="resumen"></p>
+
+    <div class="table-wrap"><table id="tabla"></table></div>
+
+    <div class="pie">
+      <span>Tarifas en <b>Bs/m³</b> (bolivianos por metro cúbico), promedio ponderado por volumen. ▲ más caro que el mes anterior · ▼ más barato · «–» sin operaciones.</span>
+    </div>
+  </div>
+</main>
+
+<script>
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// ===== Datos de ejemplo =====
+// Tarifas de Sep 2026 = las de tu gráfico; los otros meses, volúmenes y YPFB/Privado son inventados.
+// En producción: [{ origen, destino, fecha:'YYYY-MM-DD', tipo:'YPFB'|'Privado', costo_bs, volumen_m3 }, ...]
+const TARIFA_SEP = {
+  'VILLA HAYES|SANTA CRUZ': 1100, 'ASUNCIÓN|TARIJA': 1100, 'VILLETA|SANTA CRUZ': 1169, 'CAMPANA|TARIJA': 1190,
+  'CAMPANA|SANTA CRUZ': 1562, 'MOLLENDO|SANTA CRUZ': 1595, 'IQUIQUE|POTOSI': 2173,
+};
+const DATOS = [];
+Object.entries(TARIFA_SEP).forEach(([k, t], i) => {
+  const [origen, destino] = k.split('|');
+  for (let m = 0; m <= 8; m++) {
+    const base = m === 8 ? t : Math.round(t * (0.88 + ((i * 7 + m * 11) % 10) / 40));
+    const fecha = `2026-${String(m + 1).padStart(2, '0')}-15`;
+    const vY = 600 + i * 40, vP = vY / 2;   // YPFB 0.98 y Privado 1.04 → ponderado = tarifa base
+    DATOS.push({ origen, destino, fecha, tipo:'YPFB',    volumen_m3:vY, costo_bs: vY * base * 0.98 });
+    DATOS.push({ origen, destino, fecha, tipo:'Privado', volumen_m3:vP, costo_bs: vP * base * 1.04 });
+  }
+});
+// =============================
+DATOS.forEach(d => d.mes = +d.fecha.slice(5, 7) - 1);
+
+const TIPOS = [
+  { id:'todos', label:'Todos', match: () => true },
+  { id:'ypfb', label:'YPFB', match: d => d.tipo === 'YPFB' },
+  { id:'privado', label:'Privado', match: d => d.tipo === 'Privado' },
+];
+const ultimoMes = Math.max(...DATOS.map(d => d.mes));
+const estado = { tipo:'todos', mes: ultimoMes };
+const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const pf = new Intl.NumberFormat('es-BO', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const acc = () => ({ costo: 0, vol: 0 });
+const add = (a, d) => { a.costo += d.costo_bs; a.vol += d.volumen_m3; };
+const tarifa = a => a && a.vol ? a.costo / a.vol : null;
+
+function botones(id, opciones, clave, cls = '') {
+  const cont = document.getElementById(id); cont.innerHTML = '';
+  opciones.forEach(o => {
+    const b = document.createElement('button');
+    b.textContent = o.label; b.className = cls + (o.id === estado[clave] ? ' on' : '');
+    b.disabled = !!o.disabled;
+    b.onclick = () => { estado[clave] = o.id; render(); };
+    cont.appendChild(b);
+  });
+}
+
+// ▲ subió (más caro) / ▼ bajó (más barato): flecha + signo, nunca solo color
+function variacion(dif, pct) {
+  if (dif == null) return ['<td class="na">–</td>', '<td class="na">–</td>'];
+  if (Math.round(dif) === 0) return ['<td class="eq">0</td>', '<td class="eq">= 0,0 %</td>'];
+  const up = dif > 0, cls = up ? 'up' : 'down', s = up ? '+' : '−';
+  return [`<td class="${cls}">${s}${nf.format(Math.abs(dif))}</td>`,
+          `<td class="${cls}">${up ? '▲' : '▼'} ${s}${pf.format(Math.abs(pct))} %</td>`];
+}
+
+const conSep = td => td.replace('<td class="', '<td class="sep ');   // línea divisoria antes de la variación
+
+function render() {
+  botones('seg-tipo', TIPOS, 'tipo');
+  botones('meses', MESES.map((m, i) => ({ id:i, label:m, disabled: i > ultimoMes })), 'mes', 'mes');
+
+  const tipo = TIPOS.find(t => t.id === estado.tipo);
+  const m = estado.mes, ant = m - 1;
+  const tramos = new Map();
+  DATOS.filter(d => tipo.match(d) && (d.mes === m || d.mes === ant)).forEach(d => {
+    const id = d.origen + '|' + d.destino;
+    if (!tramos.has(id)) tramos.set(id, { origen: d.origen, destino: d.destino, ant: acc(), act: acc() });
+    add(d.mes === m ? tramos.get(id).act : tramos.get(id).ant, d);
+  });
+  const rows = [...tramos.values()].map(t => {
+    const a = tarifa(t.ant), b = tarifa(t.act);
+    return { ...t, a, b, dif: a != null && b != null ? Math.round(b) - Math.round(a) : null,   // sobre lo que se ve, para que la resta cuadre
+      pct: a && b != null ? (b / a - 1) * 100 : null };
+  }).filter(r => r.b != null).sort((x, y) => x.b - y.b);
+
+  const nomAnt = ant >= 0 ? MESES[ant] : '—', nomAct = MESES[m];
+  let html = `<thead><tr class="unidad"><th></th><th>Bs/m³</th><th>Bs/m³</th><th colspan="2" class="sep" style="text-align:center">Variación</th></tr>
+    <tr><th>Tramo</th><th>${nomAnt}</th><th class="act">${nomAct}</th><th class="sep">Bs/m³</th><th>%</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    const [d1, d2] = variacion(r.dif, r.pct);
+    html += `<tr><td>${r.origen}<span class="flecha">→</span>${r.destino}</td>
+      <td class="${r.a == null ? 'na' : 'prev'}">${r.a == null ? '–' : nf.format(r.a)}</td>
+      <td class="act">${nf.format(r.b)}</td>${conSep(d1)}${d2}</tr>`;
+  });
+  if (!rows.length) html += `<tr><td colspan="5" class="na" style="text-align:center">Sin operaciones en ${nomAct}.</td></tr>`;
+
+  // promedio general ponderado de ambos meses
+  const gA = acc(), gB = acc();
+  rows.forEach(r => { gA.costo += r.ant.costo; gA.vol += r.ant.vol; gB.costo += r.act.costo; gB.vol += r.act.vol; });
+  const ta = tarifa(gA), tb = tarifa(gB);
+  const [f1, f2] = variacion(ta != null && tb != null ? Math.round(tb) - Math.round(ta) : null, ta && tb != null ? (tb / ta - 1) * 100 : null);
+  html += `</tbody><tfoot><tr><td>Promedio general</td><td>${ta == null ? '–' : nf.format(ta)}</td><td class="act">${tb == null ? '–' : nf.format(tb)}</td>
+    ${conSep(f1)}${f2}</tr></tfoot>`;
+  document.getElementById('tabla').innerHTML = html;
+
+  const subieron = rows.filter(r => r.dif > 0).length, bajaron = rows.filter(r => r.dif < 0).length;
+  document.getElementById('resumen').textContent = ant < 0
+    ? `${nomAct} ${document.getElementById('anio').value}: no hay mes anterior en el año para comparar.`
+    : `${nomAct} vs ${nomAnt}: ${subieron} tramo${subieron === 1 ? '' : 's'} subieron, ${bajaron} bajaron.`;
+}
+render();
+</script>
+</body>
+</html>

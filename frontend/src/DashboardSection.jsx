@@ -69,7 +69,7 @@ function d3MultiLine(el, model, highlight) {
     .call(d3.axisBottom(x))
     .selectAll('text').attr('fill', '#6b7280').style('font-size', '12px');
 
-  const line = d3.line().x((d, i) => x(labels[i])).y((d) => y(d)).curve(d3.curveLinear);
+  const line = d3.line().x((d, i) => x(labels[i])).y((d) => y(d)).curve(d3.curveMonotoneX);
 
   top.forEach((s) => {
     const color = colorOf(s.name);
@@ -818,7 +818,10 @@ function FrecuenciaAduanas({ tab, options }) {
   const [nImp, setNImp] = useState(7);
   const [openChart, setOpenChart] = useState(false);
   const [openTable, setOpenTable] = useState(false);
-  const [highlight, setHighlight] = useState(null);
+  const [hover, setHover] = useState(null);
+  const [pinned, setPinned] = useState(null);
+  const [fijar, setFijar] = useState(false);
+  const highlight = hover || (fijar ? pinned : null);
   const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'frecuencia' });
   const chartRef = useRef(null);
 
@@ -831,16 +834,33 @@ function FrecuenciaAduanas({ tab, options }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, nImp, highlight, loading]);
 
+  function clickNombre(n) {
+    if (!fijar) return;
+    setPinned((cur) => (cur === n ? null : n));
+  }
+
+  function toggleFijar(e) {
+    const v = e.target.checked;
+    setFijar(v);
+    if (!v) setPinned(null);
+  }
+
   const cantidad = (
-    <label className="dash-nimp">
-      Importadores
-      <input
-        type="number"
-        min="1"
-        value={nImp}
-        onChange={(e) => setNImp(Math.max(1, parseInt(e.target.value, 10) || 1))}
-      />
-    </label>
+    <div className="dash-frec-head">
+      <label className="dash-nimp">
+        Importadores
+        <input
+          type="number"
+          min="1"
+          value={nImp}
+          onChange={(e) => setNImp(Math.max(1, parseInt(e.target.value, 10) || 1))}
+        />
+      </label>
+      <label className="dash-fijar" title="Mantener el resaltado al hacer clic en un nombre">
+        <input type="checkbox" checked={fijar} onChange={toggleFijar} />
+        Fijar selección
+      </label>
+    </div>
   );
 
   return (
@@ -866,8 +886,9 @@ function FrecuenciaAduanas({ tab, options }) {
               type="button"
               key={s.name}
               className={'dash-legend-item' + (highlight === s.name ? ' on' : '')}
-              onMouseEnter={() => setHighlight(s.name)}
-              onMouseLeave={() => setHighlight(null)}
+              onMouseEnter={() => setHover(s.name)}
+              onMouseLeave={() => setHover(null)}
+              onClick={() => clickNombre(s.name)}
             >
               <span className="dash-legend-sw" style={{ background: model.colorOf(s.name) }} />
               {sl(s.name, 24)}
@@ -891,7 +912,7 @@ function FrecuenciaAduanas({ tab, options }) {
         {error && <p className="error">{error}</p>}
         {loading && <p className="empty">Cargando…</p>}
         {!loading && !error && !data && <p className="empty">Sin datos.</p>}
-        {data && <AduanaTable model={model} matrix={matrix} aduanas={aduanas} highlight={highlight} setHighlight={setHighlight} />}
+        {data && <AduanaTable model={model} matrix={matrix} aduanas={aduanas} highlight={highlight} setHighlight={setHover} />}
       </CardFrame>
     </>
   );
@@ -907,6 +928,244 @@ function defaultFiltro() {
   let pm = now.getMonth() - 1;
   if (pm < 0) { pm = 11; anio -= 1; }
   return { anio: String(anio), meses: [String(pm + 1)] };
+}
+
+// ==================== TABLAS: TARIFAS Y VOLUMEN ====================
+
+const TIPOS_TABLA = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'ypfb', label: 'YPFB' },
+  { id: 'privado', label: 'Privado' },
+];
+
+function TipoSeg({ value, onChange }) {
+  return (
+    <div className="dash-seg">
+      {TIPOS_TABLA.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={value === t.id ? 'on' : ''}
+          onClick={() => onChange(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function mesPrevio(m) {
+  return m === 1 ? 12 : m - 1;
+}
+
+function celdasVariacion(dif, pct) {
+  if (dif == null) return [<td key="v" className="na">–</td>, <td key="p" className="na">–</td>];
+  if (Math.round(dif) === 0) return [<td key="v" className="eq">0</td>, <td key="p" className="eq">= 0.0 %</td>];
+  const up = dif > 0;
+  const cls = up ? 'up' : 'down';
+  const s = up ? '+' : '−';
+  return [
+    <td key="v" className={cls}>{s}{fmt(Math.abs(dif), 0)}</td>,
+    <td key="p" className={cls}>{up ? '▲' : '▼'} {s}{fmt(Math.abs(pct), 1)} %</td>,
+  ];
+}
+
+function TarifasTable({ tab, options, unidad, title }) {
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filtro, setFiltro] = useState(defaultFiltro);
+  const [open, setOpen] = useState(false);
+  const [tipo, setTipo] = useState('todos');
+  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'tarifas', unidad, tipo });
+
+  const esBs = unidad === 'bs';
+  const unit = esBs ? 'Bs/m³' : 'USD/m³';
+  const rows = (data && data.tarifas ? data.tarifas : [])
+    .filter((r) => r.act != null)
+    .map((r) => ({
+      ...r,
+      dif: r.ant != null ? Math.round(r.act) - Math.round(r.ant) : null,
+      pct: r.ant ? (r.act / r.ant - 1) * 100 : null,
+    }))
+    .sort((a, b) => a.act - b.act);
+  const general = (data && data.general) || {};
+
+  const mesAct = parseInt((filtro.meses && filtro.meses[0]) || defaultFiltro().meses[0], 10);
+  const mesAnt = mesPrevio(mesAct);
+  const nomAct = MES_ABBR[mesAct - 1];
+  const nomAnt = MES_ABBR[mesAnt - 1];
+
+  const fmtT = (v) => (v == null ? '–' : fmt(v, 0));
+  const gDif = general.ant != null && general.act != null ? Math.round(general.act) - Math.round(general.ant) : null;
+  const gPct = general.ant && general.act != null ? (general.act / general.ant - 1) * 100 : null;
+
+  return (
+    <CardFrame
+      title={title}
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      active={hasActiveFilters(filters)}
+      filtro={filtro}
+      setFiltro={setFiltro}
+      options={options}
+      singleMonth
+      headerExtra={<TipoSeg value={tipo} onChange={setTipo} />}
+    >
+      {open && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
+      {error && <p className="error">{error}</p>}
+      {loading && <p className="empty">Cargando…</p>}
+      {!loading && !error && rows.length === 0 && <p className="empty">Sin operaciones en {nomAct}.</p>}
+      {rows.length > 0 && (
+        <div className="table-scroll">
+          <table className="dash-tarifas">
+            <thead>
+              <tr className="unidad">
+                <th />
+                <th>{unit}</th>
+                <th>{unit}</th>
+                <th colSpan={2} className="sep">Variación</th>
+              </tr>
+              <tr>
+                <th>Tramo</th>
+                <th>{nomAnt}</th>
+                <th className="act">{nomAct}</th>
+                <th className="sep">{unit}</th>
+                <th>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.tramo}>
+                  <td className="tramo">{r.tramo}</td>
+                  <td className={r.ant == null ? 'na' : 'prev'}>{fmtT(r.ant)}</td>
+                  <td className="act">{fmtT(r.act)}</td>
+                  {celdasVariacion(r.dif, r.pct)}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Promedio general</td>
+                <td>{fmtT(general.ant)}</td>
+                <td className="act">{fmtT(general.act)}</td>
+                {celdasVariacion(gDif, gPct)}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </CardFrame>
+  );
+}
+
+function VolumenFronteraTable({ tab, options }) {
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filtro, setFiltro] = useState(defaultFiltro);
+  const [open, setOpen] = useState(false);
+  const [tipo, setTipo] = useState('todos');
+  const [nImp, setNImp] = useState(7);
+  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'volumen-frontera', tipo });
+
+  const raw = data && data.volumen_frontera ? data.volumen_frontera : [];
+  const byImp = new Map();
+  for (const r of raw) {
+    if (!byImp.has(r.importador)) byImp.set(r.importador, { nombre: r.importador, por: {}, total: 0 });
+    const row = byImp.get(r.importador);
+    row.por[r.aduana] = (row.por[r.aduana] || 0) + r.volumen;
+    row.total += r.volumen;
+  }
+  const rows = [...byImp.values()]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, Math.max(1, nImp));
+  const frontSet = new Set();
+  for (const r of rows) for (const f of Object.keys(r.por)) frontSet.add(f);
+  const colTotals = {};
+  for (const f of frontSet) colTotals[f] = rows.reduce((s, r) => s + (r.por[f] || 0), 0);
+  const cols = [...frontSet].filter((f) => colTotals[f] > 0).sort((a, b) => colTotals[b] - colTotals[a]);
+  const grand = rows.reduce((s, r) => s + r.total, 0);
+  const max = Math.max(1, ...rows.flatMap((r) => cols.map((f) => r.por[f] || 0)));
+
+  const mesAct = parseInt((filtro.meses && filtro.meses[0]) || defaultFiltro().meses[0], 10);
+  const nomAct = MES_ABBR[mesAct - 1];
+
+  function heatStyle(v) {
+    if (!v) return {};
+    const p = Math.round(Math.sqrt(v / max) * 85);
+    return { background: `rgba(37, 99, 235, ${(p / 100) * 0.9})`, color: p > 45 ? '#fff' : undefined };
+  }
+
+  return (
+    <CardFrame
+      title="Volumen por Frontera (m³)"
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      active={hasActiveFilters(filters)}
+      filtro={filtro}
+      setFiltro={setFiltro}
+      options={options}
+      singleMonth
+      headerExtra={(
+        <div className="dash-frec-head">
+          <label className="dash-nimp">
+            Importadores
+            <input
+              type="number"
+              min="1"
+              value={nImp}
+              onChange={(e) => setNImp(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            />
+          </label>
+          <TipoSeg value={tipo} onChange={setTipo} />
+        </div>
+      )}
+    >
+      {open && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
+      {error && <p className="error">{error}</p>}
+      {loading && <p className="empty">Cargando…</p>}
+      {!loading && !error && rows.length === 0 && <p className="empty">Sin volumen en {nomAct}.</p>}
+      {rows.length > 0 && (
+        <div className="table-scroll">
+          <table className="dash-volumen">
+            <thead>
+              <tr className="super">
+                <th />
+                <th colSpan={cols.length} className="centro">Fronteras</th>
+                <th />
+              </tr>
+              <tr>
+                <th>Importador</th>
+                {cols.map((f) => <th key={f} className="fr">{f}</th>)}
+                <th className="tot">Total m³</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.nombre}>
+                  <td className="imp">{r.nombre}</td>
+                  {cols.map((f) => {
+                    const v = r.por[f] || 0;
+                    return (
+                      <td key={f} className={v ? '' : 'cero'} style={heatStyle(v)} title={`${r.nombre} · ${f}: ${fmt(v, 0)} m³`}>
+                        {v ? fmt(v, 0) : 0}
+                      </td>
+                    );
+                  })}
+                  <td className="tot">{fmt(r.total, 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                {cols.map((f) => <td key={f}>{fmt(colTotals[f], 0)}</td>)}
+                <td className="tot">{fmt(grand, 0)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </CardFrame>
+  );
 }
 
 export default function DashboardSection({ canWrite }) {
@@ -971,16 +1230,13 @@ export default function DashboardSection({ canWrite }) {
 
       <div className="dash-st">Precio por Empresa (Bs/litro)</div>
       <BubbleCard title="Precio Promedio por Empresa (Bs/litro)" tab={tab} options={options} marcadores={marcadores.empresa} canWrite={canWrite} onAplicar={aplicarMarcadores} />
-      <BubbleCard title="Precio Promedio YPFB (Bs/litro)" tab={tab} options={options} ypfb marcadores={marcadores.ypfb} canWrite={canWrite} onAplicar={aplicarMarcadores} />
 
       <div className="dash-st">Logística</div>
-      <div className="dash-row">
-        <div className="dash-half"><ChartCard title="Tarifa Flete Prom. por Tramo ($/M³)" tab={tab} options={options} render={(el, d) => d3HBar(el, d.flete_tramo || {}, '$/M³')} /></div>
-        <div className="dash-half"><ChartCard title="Tarifa Flete Prom. por Tramo (Bs/M³)" tab={tab} options={options} render={(el, d) => d3HBar(el, d.flete_tramo_bob || {}, 'Bs/M³')} /></div>
-      </div>
+      <TarifasTable tab={tab} options={options} unidad="usd" title="Tarifa Flete Prom. por Tramo (USD/m³)" />
+      <TarifasTable tab={tab} options={options} unidad="bs" title="Tarifa Flete Prom. por Tramo (Bs/m³)" />
 
       <div className="dash-st">Análisis por Importador</div>
-      <ChartCard title="Volumen Total por Importador (M³)" tab={tab} options={options} render={(el, d) => d3HBar(el, d.vol_empresa || {}, 'M³', 10)} />
+      <VolumenFronteraTable tab={tab} options={options} />
 
       <div className="dash-st">Cadena de Suministro</div>
       <div className="dash-row">

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Volumen por Frontera</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+    --accent:#2a78d6; --accent-wash:rgba(42,120,214,.10);
+    --heat-0:#fcfcfb; --heat-1:#2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+      --accent:#3987e5; --accent-wash:rgba(57,135,229,.16); --heat-0:#1a1a19; --heat-1:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --accent:#3987e5; --accent-wash:rgba(57,135,229,.16); --heat-0:#1a1a19; --heat-1:#3987e5;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; }
+  .top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+  h1 { font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); margin:0; }
+  .controls { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  select, button { font:inherit; font-size:13px; color:var(--ink-2); background:var(--surface); border:1px solid var(--axis); border-radius:6px; padding:4px 10px; cursor:pointer; }
+  .mes.sel { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .mes:disabled { opacity:.4; cursor:default; }
+
+  .barra-filtros { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:12px; margin-bottom:10px; }
+  .grupo { display:flex; align-items:center; gap:8px; }
+  .grupo .lbl { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  /* control segmentado */
+  .seg { display:inline-flex; border:1px solid var(--axis); border-radius:8px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; padding:5px 14px; }
+  .seg button + button { border-left:1px solid var(--axis); }
+  .seg button.on { background:var(--accent); color:#fff; font-weight:600; }
+
+  .resumen { display:flex; flex-wrap:wrap; gap:6px 24px; color:var(--ink-2); font-size:13px; margin-bottom:8px; }
+  .resumen b { color:var(--ink); font-variant-numeric:tabular-nums; }
+
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums; }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--grid); text-align:right; white-space:nowrap; }
+  thead th { font-size:12px; color:var(--muted); font-weight:600; vertical-align:bottom; }
+  thead .super th { color:var(--ink-2); text-transform:uppercase; letter-spacing:.05em; border-bottom:none; padding-bottom:0; }
+  th.fr { white-space:normal; min-width:92px; }
+  th:first-child, td:first-child { text-align:left; position:sticky; left:0; background:var(--surface); z-index:1; white-space:normal; min-width:220px; }
+  td.cero { color:var(--muted); }
+  td.tot, th.tot { font-weight:700; border-left:1px solid var(--grid); }
+  tbody tr:hover td:first-child { font-weight:600; }
+  tfoot td { font-weight:700; border-top:2px solid var(--axis); border-bottom:none; }
+  .tag { font-size:11px; font-weight:400; color:var(--ink-2); border:1px solid var(--axis); border-radius:4px; padding:0 5px; margin-left:6px; }
+  .vacio { color:var(--muted); text-align:center !important; padding:28px 0; }
+  .note { color:var(--muted); font-size:12px; margin-top:10px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="top">
+      <h1>Volumen por frontera (m³)</h1>
+      <div class="controls">
+        <select id="anio"><option>2026</option></select>
+        <span id="meses" class="controls"></span>
+      </div>
+    </div>
+
+    <div class="barra-filtros">
+      <div class="grupo">
+        <span class="lbl">Tipo</span>
+        <div class="seg" id="seg-tipo"></div>
+      </div>
+    </div>
+    <div class="resumen" id="resumen"></div>
+
+    <div class="table-wrap"><table id="tabla"></table></div>
+    <p class="note">Volumen en m³ de cada fila por frontera en el mes elegido. El color de la celda indica el volumen (más oscuro = mayor). Pasa el cursor por una celda para ver el detalle.</p>
+  </div>
+</main>
+
+<script>
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const FRONTERAS = ['TAMBO QUEMADO','DESAGUADERO','AVAROA','PISIGA','YACUIBA','APACHETA','CAÑADA ORURO'];
+
+// ===== Datos de ejemplo =====
+// Totales de Sep 2026 tomados de tu gráfico; el reparto por frontera y los otros meses son inventados.
+// En producción: [{ importador, frontera, mes: 0-11, volumen_m3 }, ...]
+const BASE_SEP = {
+  'YPFB': 405664, 'MINERA SAN CRISTOBAL S.A.': 3808, 'RAUL BRIAN CLAURE MIRANDA': 2068,
+  'MONICA LIZZETH CONDORI TINTA': 1970, 'ANAPO': 1825, 'INTPETROL S.R.L.': 1714, 'BARAN GLOBAL ENGINEERING BOLIVIA': 1671,
+};
+const DATOS = [];
+const sum = a => a.reduce((s,x) => s + x, 0);
+Object.entries(BASE_SEP).forEach(([importador, v], i) => {
+  const pesos = FRONTERAS.map((_, f) => [5,3,2,0,1,0,1][(f + i * 2) % 7]);   // cada importador usa 4-5 fronteras
+  const sp = pesos.reduce((s,p) => s + p, 0);
+  for (let m = 0; m <= 8; m++) {
+    const total = Math.round(v * (m === 8 ? 1 : 0.7 + ((i * 7 + m * 13) % 10) / 15));
+    const vols = pesos.map(p => Math.floor(total * p / sp));
+    vols[pesos.indexOf(5)] += total - sum(vols);   // el resto a la frontera principal: el total cuadra exacto
+    vols.forEach((vf, f) => {
+      if (!vf) return;
+      DATOS.push({ importador, frontera: FRONTERAS[f], mes: m, volumen_m3: vf });
+    });
+  }
+});
+// =============================
+
+const esYPFB = d => d.importador === 'YPFB';
+const TIPOS = [
+  { id:'todos',   label:'Todos',   match: () => true },
+  { id:'ypfb',    label:'YPFB',    match: esYPFB },
+  { id:'privado', label:'Privado', match: d => !esYPFB(d) },
+];
+const ultimoMes = Math.max(...DATOS.map(d => d.mes));
+const estado = { mes: ultimoMes, tipo: 'todos' };
+
+const nf = new Intl.NumberFormat('en-US');   // 405,664 como en tu pantalla
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function segmentado(id, opciones, clave) {
+  const cont = document.getElementById(id); cont.innerHTML = '';
+  opciones.forEach(o => {
+    const b = document.createElement('button');
+    b.textContent = o.label; b.className = estado[clave] === o.id ? 'on' : '';
+    b.setAttribute('aria-pressed', estado[clave] === o.id);
+    b.onclick = () => { estado[clave] = o.id; render(); };
+    cont.appendChild(b);
+  });
+}
+
+function buildMeses() {
+  const cont = document.getElementById('meses'); cont.innerHTML = '';
+  MESES.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.className = 'mes' + (i === estado.mes ? ' sel' : '');
+    b.textContent = m; b.disabled = i > ultimoMes;
+    b.onclick = () => { estado.mes = i; render(); };
+    cont.appendChild(b);
+  });
+}
+
+function matriz() {
+  const tipo = TIPOS.find(t => t.id === estado.tipo);
+  const filas = new Map();
+  DATOS.filter(d => d.mes === estado.mes && tipo.match(d)).forEach(d => {
+    const k = d.importador;
+    if (!filas.has(k)) filas.set(k, Object.fromEntries(FRONTERAS.map(f => [f, 0])));
+    filas.get(k)[d.frontera] += d.volumen_m3;
+  });
+  return [...filas].map(([nombre, porFrontera]) => ({ nombre, porFrontera, total: sum(Object.values(porFrontera)) }))
+    .filter(r => r.total > 0).sort((a,b) => b.total - a.total);
+}
+
+function buildTabla(rows) {
+  const max = Math.max(1, ...rows.flatMap(r => FRONTERAS.map(f => r.porFrontera[f])));
+  const h0 = css('--heat-0'), h1 = css('--heat-1');
+  let html = `<thead><tr class="super"><th></th><th colspan="${FRONTERAS.length}" style="text-align:center">Fronteras</th><th></th></tr>
+    <tr><th>Importador</th>${FRONTERAS.map(f => `<th class="fr">${f}</th>`).join('')}<th class="tot">Total m³</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += `<tr><td>${r.nombre}</td>`;
+    FRONTERAS.forEach(f => {
+      const v = r.porFrontera[f];
+      if (!v) { html += `<td class="cero">0</td>`; return; }
+      // escala raíz: con YPFB presente, los volúmenes chicos no quedan blancos
+      const p = Math.round(Math.sqrt(v / max) * 85);
+      html += `<td title="${r.nombre} · ${f}: ${nf.format(v)} m³" style="background:color-mix(in oklab, ${h1} ${p}%, ${h0});${p > 45 ? 'color:#fff' : ''}">${nf.format(v)}</td>`;
+    });
+    html += `<td class="tot">${nf.format(r.total)}</td></tr>`;
+  });
+  if (!rows.length) html += `<tr><td colspan="${FRONTERAS.length + 2}" class="vacio">Sin volumen para este filtro.</td></tr>`;
+  const col = FRONTERAS.map(f => sum(rows.map(r => r.porFrontera[f])));
+  html += `</tbody><tfoot><tr><td>Total</td>${col.map(v => `<td>${nf.format(v)}</td>`).join('')}<td class="tot">${nf.format(sum(col))}</td></tr></tfoot>`;
+  document.getElementById('tabla').innerHTML = html;
+}
+
+function render() {
+  const rows = matriz();
+  buildMeses();
+  segmentado('seg-tipo', TIPOS, 'tipo');
+  buildTabla(rows);
+  const tipo = TIPOS.find(t => t.id === estado.tipo).label;
+  const n = rows.length;
+  document.getElementById('resumen').innerHTML =
+    `<span>${MESES[estado.mes]} ${document.getElementById('anio').value} · ${tipo}</span>` +
+    `<span>Volumen: <b>${nf.format(sum(rows.map(r => r.total)))} m³</b></span>` +
+    `<span>${n} ${n === 1 ? 'importador' : 'importadores'}</span>`;
+}
+render();
+</script>
+</body>
+</html>

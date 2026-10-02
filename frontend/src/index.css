@@ -259,6 +259,39 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 }
 .dash-tooltip strong { color: #d97706; }
 
+/* ============ Tablas del panel (tarifas y volumen) ============ */
+.dash-seg { display: inline-flex; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
+.dash-seg button {
+  border: none; background: #fff; color: #6b7280; padding: 4px 12px; font-size: 12px; cursor: pointer;
+}
+.dash-seg button + button { border-left: 1px solid #d1d5db; }
+.dash-seg button.on { background: #2563eb; color: #fff; font-weight: 600; }
+
+.dash-tarifas, .dash-volumen { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+.dash-tarifas th, .dash-tarifas td,
+.dash-volumen th, .dash-volumen td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid #e5e7eb; }
+.dash-tarifas thead th, .dash-volumen thead th { font-size: 12px; color: #6b7280; font-weight: 600; }
+.dash-tarifas thead .unidad th, .dash-volumen thead .super th { font-size: 11px; color: #9ca3af; border-bottom: none; padding-bottom: 0; }
+.dash-tarifas th:first-child, .dash-tarifas td:first-child,
+.dash-volumen th:first-child, .dash-volumen td:first-child {
+  text-align: left; position: sticky; left: 0; background: #fff; z-index: 1;
+}
+.dash-tarifas td.tramo { white-space: normal; max-width: 220px; }
+.dash-tarifas .act { font-weight: 700; color: #111827; }
+.dash-tarifas .prev { color: #6b7280; }
+.dash-tarifas .na { color: #9ca3af; }
+.dash-tarifas .up { color: #dc2626; }
+.dash-tarifas .down { color: #16a34a; }
+.dash-tarifas .eq { color: #9ca3af; }
+.dash-tarifas .sep, .dash-tarifas th.sep { border-left: 1px solid #e5e7eb; }
+.dash-tarifas tfoot td, .dash-volumen tfoot td { font-weight: 700; border-top: 2px solid #d1d5db; border-bottom: none; }
+
+.dash-volumen th.fr { white-space: normal; min-width: 84px; }
+.dash-volumen .centro { text-align: center; }
+.dash-volumen td.imp { white-space: normal; min-width: 200px; }
+.dash-volumen .cero { color: #9ca3af; }
+.dash-volumen .tot, .dash-volumen th.tot { font-weight: 700; border-left: 1px solid #e5e7eb; }
+
 /* ============ Filtros por gráfico (cabecera minimizada) ============ */
 .dash-card-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -322,8 +355,8 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 .dash-weekly-expand td { background: #fafbfc; color: #4b5563; font-size: 12px; white-space: normal; word-break: break-word; }
 .dash-weekly-names { display: flex; flex-wrap: wrap; gap: 4px 14px; max-width: 100%; }
 .dash-weekly-names span { white-space: nowrap; }
-.dash-weekly .pos { color: #16a34a; font-weight: 600; }
-.dash-weekly .neg { color: #dc2626; font-weight: 600; }
+.dash-weekly .pos { color: #dc2626; font-weight: 600; }
+.dash-weekly .neg { color: #16a34a; font-weight: 600; }
 
 /* ============ Frecuencia de operaciones: leyenda y filtro de cantidad ============ */
 .dash-nimp {
@@ -334,6 +367,12 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
   width: 58px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 7px;
   font-size: 11px; color: #374151; background: #fff;
 }
+.dash-frec-head { display: inline-flex; align-items: center; gap: 14px; }
+.dash-fijar {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280;
+}
+.dash-fijar input { margin: 0; cursor: pointer; }
 .dash-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px; }
 .dash-legend-item {
   display: inline-flex; align-items: center; gap: 6px;
