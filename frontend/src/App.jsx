@@ -3,7 +3,7 @@ import {
   getClientes,
   getAduanas, postAduana, getManifiestos,
   getCombustibles, getDocumentos, putCombustible, ignorarTarifa,
-  ejecutarManifiestos, ejecutarCombustibles,
+  ejecutarManifiestos, ejecutarCombustibles, backfillManifiestos,
   getTipoCambio, actualizarTipoCambio, sincronizarTipoCambioCombustibles,
   getReferencias, postReferencia,
   getPrecioMarcador, previewPrecioMarcador, procesarPrecioMarcador, rellenarPrecioMarcador, aplicarPrecioMarcador,
@@ -292,6 +292,20 @@ function CombustiblesSection({ canWrite }) {
     }
   }
 
+  async function completarManifiestos() {
+    setRunning(true);
+    setRunMsg(null);
+    try {
+      const r = await backfillManifiestos();
+      setRunMsg(`Manifiestos completados: ${r.copiados} copiados, ${r.sinManifiesto} sin manifiesto, ${r.errores} errores.`);
+      setRefresh((n) => n + 1);
+    } catch (e) {
+      setRunMsg(`Error: ${e.message}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function toggleDocs(id) {
     setDocsId((cur) => (cur === id ? null : id));
   }
@@ -358,6 +372,7 @@ function CombustiblesSection({ canWrite }) {
         </select>
         {canWrite && <button className="btn" onClick={procesar} disabled={running}>{running ? 'Procesando…' : 'Procesar Combustibles'}</button>}
         {canWrite && <button className="btn" onClick={sincronizarTc} disabled={running}>Sincronizar T/C</button>}
+        {canWrite && <button className="btn" onClick={completarManifiestos} disabled={running}>Completar manifiestos</button>}
         <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
         <button className="btn" onClick={refrescarMes} disabled={running}>Refrescar</button>
         <a className="btn" href={`/api/combustibles/export${mes ? `?mes=${mes}` : ''}`}>Descargar Excel</a>

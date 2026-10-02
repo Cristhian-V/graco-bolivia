@@ -395,11 +395,18 @@ export async function executeCombustiblesRun({ nits, desde, hasta }) {
   const runId = rows[0].id;
   try {
     const stats = await runCombustibles({ runId, nits, desde, hasta });
+    let manifiestos = null;
+    try {
+      manifiestos = await backfillManifiestos();
+      console.log('[combustibles] manifiestos de carga completados:', manifiestos);
+    } catch (e) {
+      console.error('[combustibles] backfill de manifiestos falló:', e.message);
+    }
     await pool.query(
       `UPDATE ejecuciones SET estado='OK', finalizado_en=now(), total_prm=$1, prm_nuevos=$2, errores=$3 WHERE id=$4`,
       [stats.total, stats.nuevos, stats.errores, runId],
     );
-    return { runId, estado: 'OK', ...stats };
+    return { runId, estado: 'OK', ...stats, manifiestos };
   } catch (e) {
     await pool.query(
       `UPDATE ejecuciones SET estado='ERROR', finalizado_en=now(), mensaje=$1 WHERE id=$2`,

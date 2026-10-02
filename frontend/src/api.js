@@ -57,6 +57,7 @@ export const putCombustible = (id, body) =>
 export const ignorarTarifa = (id) => postJSON(`/combustibles/${id}/ignorar`, {});
 export const ejecutarManifiestos = () => postJSON('/ejecutar-manifiestos', {});
 export const ejecutarCombustibles = () => postJSON('/ejecutar-combustibles', {});
+export const backfillManifiestos = () => postJSON('/combustibles/manifiestos-backfill', {});
 export const getTipoCambio = () => getJSON('/tipo-cambio');
 export const actualizarTipoCambio = (desde, hasta) =>
   postJSON('/tipo-cambio/actualizar', { desde, hasta });
