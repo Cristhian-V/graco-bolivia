@@ -261,56 +261,55 @@ function d3HBar(el, obj, unit, fs = 12) {
 function d3Donut(el, obj, unit) {
   const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);
   if (!entries.length) return;
-  const w = 320, h = 320, m = { top: 10, right: 10, bottom: 70, left: 10 };
+  const w = 760, h = 440, m = { top: 10, right: 10, bottom: 10, left: 10 };
   const { svg, g, w: iw, h: ih } = svgEl(el, w, h, m);
-  const radius = Math.min(iw, ih) / 2 - 15;
-  const cx = iw / 2, cy = ih / 2;
   const total = d3.sum(entries.map((e) => e[1]));
 
+  const radius = Math.min(iw * 0.5, ih) / 2 - 10;
+  const cx = iw * 0.25;
+  const cy = ih / 2;
+
   const pie = d3.pie().value((d) => d[1]).sort(null);
-  const arc = d3.arc().innerRadius(radius * 0.52).outerRadius(radius);
-  const labelArc = d3.arc().innerRadius(radius * 0.75).outerRadius(radius * 0.75);
+  const arc = d3.arc().innerRadius(0).outerRadius(radius);
+  const pctArc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius * 0.6);
   const arcs = pie(entries);
 
-  g.attr('transform', `translate(${cx},${cy})`);
+  const gp = g.append('g').attr('transform', `translate(${cx},${cy})`);
 
-  g.selectAll('path').data(arcs).join('path')
+  gp.selectAll('path').data(arcs).join('path')
     .attr('d', arc).attr('fill', (d, i) => ((d.data._ci = i), SERIES[i % SERIES.length] + 'dd'))
-    .attr('stroke', (d, i) => SERIES[i % SERIES.length]).attr('stroke-width', 1.5)
+    .attr('stroke', '#fff').attr('stroke-width', 1)
     .on('mouseover', function (evt, d) {
-      d3.select(this).attr('fill', SERIES[d.data._ci % SERIES.length]).attr('transform', 'scale(1.05)');
+      d3.select(this).attr('fill', SERIES[d.data._ci % SERIES.length]);
       const pct = (d.data[1] / total * 100).toFixed(1);
       tip.show(evt, `<strong>${sl(d.data[0], 30)}</strong><br>${fmt(d.data[1], 0)} ${unit || ''} (${pct}%)`);
     })
     .on('mouseout', function (evt, d) {
-      d3.select(this).attr('fill', SERIES[d.data._ci % SERIES.length] + 'dd').attr('transform', 'scale(1)');
+      d3.select(this).attr('fill', SERIES[d.data._ci % SERIES.length] + 'dd');
       tip.hide();
     });
 
-  g.selectAll('.pct-label').data(arcs).join('text')
+  gp.selectAll('.pct-label').data(arcs).join('text')
     .attr('class', 'pct-label')
-    .attr('transform', (d) => `translate(${labelArc.centroid(d)})`)
-    .attr('text-anchor', 'middle').attr('fill', '#1f2937').style('font-size', '12px').style('font-weight', '700')
+    .attr('transform', (d) => `translate(${pctArc.centroid(d)})`)
+    .attr('text-anchor', 'middle').attr('fill', '#fff').style('font-size', '13px').style('font-weight', '700')
+    .style('paint-order', 'stroke').style('stroke', 'rgba(0,0,0,.28)').style('stroke-width', '2px')
     .text((d) => {
       const pct = (d.data[1] / total * 100);
-      return pct >= 5 ? `${pct.toFixed(1)}%` : '';
+      return pct >= 4 ? `${pct.toFixed(0)}%` : '';
     });
 
-  g.append('text').attr('text-anchor', 'middle').attr('dy', '-0.3em')
-    .attr('fill', '#1f2937').style('font-size', '15px').style('font-weight', '700')
-    .text(fmt(total, 0));
-  g.append('text').attr('text-anchor', 'middle').attr('dy', '1em')
-    .attr('fill', '#6b7280').style('font-size', '11px').text(unit || 'Total');
-
-  const legend = g.append('g').attr('transform', `translate(${-iw / 2 + 5},${cy + radius + 18})`);
-  let ly = 0;
+  // Nombres en una lista a la derecha.
+  const rowH = 24;
+  const lx = iw * 0.52;
+  const ly0 = cy - ((entries.length - 1) * rowH) / 2;
   entries.forEach(([k, v], i) => {
     const pct = (v / total * 100).toFixed(1);
-    const lg = legend.append('g').attr('transform', `translate(0,${ly})`);
-    lg.append('rect').attr('width', 8).attr('height', 8).attr('rx', 2).attr('fill', SERIES[i % SERIES.length]);
-    lg.append('text').attr('x', 12).attr('y', 9)
-      .text(`${sl(k, 16)} (${pct}%)`).attr('fill', '#6b7280').style('font-size', '10px');
-    ly += 15;
+    const lg = g.append('g').attr('transform', `translate(${lx},${ly0 + i * rowH})`);
+    lg.append('rect').attr('x', 0).attr('y', -6).attr('width', 13).attr('height', 13).attr('rx', 3)
+      .attr('fill', SERIES[i % SERIES.length]);
+    lg.append('text').attr('x', 20).attr('y', 6).attr('fill', '#374151').style('font-size', '14px')
+      .text(`${sl(k, 34)} (${pct}%)`);
   });
 }
 
@@ -322,66 +321,97 @@ function d3Bubble(el, rows, marcadores) {
     .sort((a, b) => b.volumen - a.volumen)
     .slice(0, 7)
     .sort((a, b) => b.precio_bs_litro - a.precio_bs_litro);
-  const w = 1000, h = 460, m = { top: 10, right: 60, bottom: 110, left: 70 };
+  const w = 1000, h = 500, m = { top: 24, right: 110, bottom: 150, left: 70 };
   const { svg, g, w: iw, h: ih } = svgEl(el, w, h, m);
 
-  const labels = entries.map((e) => sl(e.empresa, 24));
-  const yMin = 0;
-  const maxPrecio = d3.max(entries, (e) => Number(e.precio_bs_litro)) || 0;
-  const maxMarca = marcas.length ? Math.max(...marcas) : 0;
-  const yMax = Math.max(Math.ceil(Math.max(maxPrecio, maxMarca, 20)) + 1, 20);
+  if (!entries.length) {
+    g.append('text').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle')
+      .attr('fill', '#9ca3af').style('font-size', '13px').text('Sin datos');
+    return;
+  }
 
-  const x = d3.scalePoint().domain(labels).range([0, iw]).padding(0.5);
-  const y = d3.scaleLinear().domain([yMin, yMax]).range([ih, 0]);
+  const labels = entries.map((e) => e.empresa);
+  const precios = entries.map((e) => Number(e.precio_bs_litro));
+  const vols = entries.map((e) => Number(e.volumen) || 0);
 
-  g.append('g').attr('class', 'grid')
-    .call(d3.axisLeft(y).ticks(6).tickSize(-iw).tickFormat(''));
-  g.append('g').attr('class', 'axis')
-    .call(d3.axisLeft(y).ticks(6)).selectAll('text').style('font-size', '14px');
-  g.append('text').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -56)
-    .attr('fill', '#374151').style('font-size', '15px').style('text-anchor', 'middle').text('Bs / Litro');
+  // Eje izquierdo: precio, mínimo dos unidades por debajo del menor precio.
+  const y = d3.scaleLinear()
+    .domain([Math.min(...precios) - 2, Math.max(...precios, ...marcas)])
+    .range([ih, 0]);
 
+  const x = d3.scaleBand().domain(labels).range([0, iw]).paddingInner(0.45).paddingOuter(0.25);
+  const bw = x.bandwidth();
+
+  // Eje derecho: volumen en escala logarítmica.
+  const volsPos = vols.filter((v) => v > 0);
+  const minV = volsPos.length ? Math.min(...volsPos) : 1;
+  const maxV = volsPos.length ? Math.max(...volsPos) : 10;
+  const yR = d3.scaleLog().domain([minV * 0.6, maxV * 1.8]).range([ih, 0]);
+  const volY = (v) => yR(Math.max(v, minV * 0.6));
+
+  g.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(8).tickSize(-iw).tickFormat(''));
+  g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(8)).selectAll('text').style('font-size', '12px');
+  g.append('text').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -52)
+    .attr('fill', '#374151').style('font-size', '13px').style('text-anchor', 'middle').text('Precio (Bs / Litro)');
+
+  g.append('g').attr('class', 'axis').attr('transform', `translate(${iw},0)`)
+    .call(d3.axisRight(yR).ticks(4, '~s')).selectAll('text').style('font-size', '12px');
+  g.append('text').attr('transform', `translate(${iw + 60},${ih / 2}) rotate(90)`)
+    .attr('text-anchor', 'middle').attr('fill', '#374151').style('font-size', '13px')
+    .text('Volumen (m³) — Escala Log');
+
+  // Barras de volumen.
+  g.selectAll('.bar').data(entries).join('rect')
+    .attr('class', 'bar')
+    .attr('x', (e) => x(e.empresa))
+    .attr('y', (e) => volY(Number(e.volumen) || 0))
+    .attr('width', bw)
+    .attr('height', (e) => ih - volY(Number(e.volumen) || 0))
+    .attr('fill', '#e5e7eb');
+
+  g.selectAll('.bar-lbl').data(entries).join('text')
+    .attr('class', 'bar-lbl')
+    .attr('x', (e) => x(e.empresa) + bw / 2)
+    .attr('y', (e) => volY(Number(e.volumen) || 0) - 5)
+    .attr('text-anchor', 'middle').attr('fill', '#6b7280').style('font-size', '11px')
+    .text((e) => `${fmt(e.volumen, 0)} M³`);
+
+  // Líneas de referencia (marcadores).
   marcas.forEach((v) => {
+    if (v < y.domain()[0] || v > y.domain()[1]) return;
     g.append('line').attr('x1', 0).attr('x2', iw).attr('y1', y(v)).attr('y2', y(v))
       .attr('stroke', '#f59e0b').attr('stroke-width', 2).attr('stroke-dasharray', '6,4');
-    g.append('text').attr('x', iw - 4).attr('y', y(v) - 10).attr('text-anchor', 'end')
-      .attr('fill', '#d97706').style('font-size', '15px').style('font-weight', '700')
+    g.append('text').attr('x', iw + 6).attr('y', y(v) + 4).attr('text-anchor', 'start')
+      .attr('fill', '#d97706').style('font-size', '12px').style('font-weight', '700')
       .text(`${v} Bs/L`);
   });
 
-  g.selectAll('.bubble').data(entries).join('ellipse')
-    .attr('class', 'bubble')
-    .attr('cx', (e) => x(sl(e.empresa, 24)))
-    .attr('cy', (e) => y(e.precio_bs_litro))
-    .attr('rx', 14).attr('ry', 7)
-    .attr('fill', '#3b82f6').attr('fill-opacity', 0.55).attr('stroke', '#2563eb').attr('stroke-width', 1.5)
-    .on('mouseover', function (evt, e) {
-      d3.select(this).attr('fill-opacity', 0.9);
-      tip.show(evt, `<strong>${sl(e.empresa, 35)}</strong><br>Precio: ${fmt(e.precio_bs_litro, 2)} Bs/L<br>Volumen: ${fmt(e.volumen, 2)} m³`);
+  // Línea de precio.
+  const pts = entries.map((e) => ({ x: x(e.empresa) + bw / 2, y: y(Number(e.precio_bs_litro)), e }));
+  g.append('path').datum(pts).attr('fill', 'none').attr('stroke', '#2563eb').attr('stroke-width', 2.5)
+    .attr('d', d3.line().x((p) => p.x).y((p) => p.y).curve(d3.curveLinear));
+
+  g.selectAll('.pt').data(pts).join('circle')
+    .attr('class', 'pt').attr('cx', (p) => p.x).attr('cy', (p) => p.y).attr('r', 5)
+    .attr('fill', '#2563eb').attr('stroke', '#fff').attr('stroke-width', 1.5)
+    .on('mouseover', function (evt, p) {
+      d3.select(this).attr('r', 7);
+      tip.show(evt, `<strong>${sl(p.e.empresa, 35)}</strong><br>Precio: ${fmt(p.e.precio_bs_litro, 2)} Bs/L<br>Volumen: ${fmt(p.e.volumen, 2)} m³`);
     })
-    .on('mouseout', function () { d3.select(this).attr('fill-opacity', 0.55); tip.hide(); });
+    .on('mouseout', function () { d3.select(this).attr('r', 5); tip.hide(); });
 
-  g.selectAll('.bubble-vol').data(entries).join('text')
-    .attr('class', 'bubble-vol')
-    .attr('x', (e) => x(sl(e.empresa, 24)))
-    .attr('y', (e) => y(e.precio_bs_litro) - 11)
-    .attr('text-anchor', 'middle')
-    .attr('fill', '#374151').style('font-size', '12px').style('font-weight', '700')
-    .text((e) => `${fmt(e.volumen, 0)} M³`);
+  g.selectAll('.pt-lbl').data(pts).join('text')
+    .attr('class', 'pt-lbl').attr('x', (p) => p.x).attr('y', (p) => p.y - 10)
+    .attr('text-anchor', 'middle').attr('fill', '#111827').style('font-size', '12px').style('font-weight', '600')
+    .text((p) => `${fmt(p.e.precio_bs_litro, 2)} Bs/L`);
 
-  if (labels.length) {
-    const xAxisG = g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`);
-    xAxisG.selectAll('.tick').data(entries).join('g')
-      .attr('class', 'tick').attr('transform', (e) => `translate(${x(sl(e.empresa, 24))},0)`)
-      .append('line').attr('y2', 6).attr('stroke', '#d1d5db');
-    xAxisG.selectAll('.xlabel').data(entries).join('text')
-      .attr('class', 'xlabel').attr('x', (e) => x(sl(e.empresa, 24))).attr('y', (e, i) => 16 + (i % 2) * 14)
-      .attr('text-anchor', 'middle').attr('fill', '#1f2937').style('font-size', '11px')
-      .text((e) => sl(e.empresa, 24));
-  } else {
-    g.append('text').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle')
-      .attr('fill', '#9ca3af').style('font-size', '13px').text('Sin datos');
-  }
+  // Empresas en horizontal, intercaladas en dos alturas.
+  g.selectAll('.xname').data(entries).join('text')
+    .attr('class', 'xname')
+    .attr('x', (e) => x(e.empresa) + bw / 2)
+    .attr('y', (e, i) => ih + 16 + (i % 2) * 14)
+    .attr('text-anchor', 'middle').attr('fill', '#374151').style('font-size', '12px')
+    .text((e) => sl(e.empresa, 24));
 }
 
 // Tooltip global (elemento único en el DOM).
@@ -971,37 +1001,27 @@ function celdasVariacion(dif, pct) {
   ];
 }
 
-function TarifasTable({ tab, options, unidad, title }) {
+function TarifasTable({ tab, options }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [filtro, setFiltro] = useState(defaultFiltro);
   const [open, setOpen] = useState(false);
   const [tipo, setTipo] = useState('todos');
-  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'tarifas', unidad, tipo });
+  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'tarifas', tipo });
 
-  const esBs = unidad === 'bs';
-  const unit = esBs ? 'Bs/m³' : 'USD/m³';
-  const rows = (data && data.tarifas ? data.tarifas : [])
-    .filter((r) => r.act != null)
-    .map((r) => ({
-      ...r,
-      dif: r.ant != null ? Math.round(r.act) - Math.round(r.ant) : null,
-      pct: r.ant ? (r.act / r.ant - 1) * 100 : null,
-    }))
-    .sort((a, b) => a.act - b.act);
-  const general = (data && data.general) || {};
+  const periodos = (data && data.periodos) || [];
+  const tc = (data && data.tc) || {};
+  const general = (data && data.general) || { usd: {}, bs: {} };
+  const ultimo = periodos[periodos.length - 1];
+  const tarifas = ((data && data.tarifas) || [])
+    .slice()
+    .sort((a, b) => (a.bs[ultimo] ?? Infinity) - (b.bs[ultimo] ?? Infinity));
 
-  const mesAct = parseInt((filtro.meses && filtro.meses[0]) || defaultFiltro().meses[0], 10);
-  const mesAnt = mesPrevio(mesAct);
-  const nomAct = MES_ABBR[mesAct - 1];
-  const nomAnt = MES_ABBR[mesAnt - 1];
-
-  const fmtT = (v) => (v == null ? '–' : fmt(v, 0));
-  const gDif = general.ant != null && general.act != null ? Math.round(general.act) - Math.round(general.ant) : null;
-  const gPct = general.ant && general.act != null ? (general.act / general.ant - 1) * 100 : null;
+  const mesLabel = (p) => `${MES_ABBR[parseInt(p.slice(5, 7), 10) - 1]} ${p.slice(0, 4)}`;
+  const n = (v, d = 0) => (v == null ? '–' : fmt(v, d));
 
   return (
     <CardFrame
-      title={title}
+      title="Tarifa Flete Prom. por Tramo (Bs/m³ · USD/m³ · T/C)"
       open={open}
       onToggle={() => setOpen((o) => !o)}
       active={hasActiveFilters(filters)}
@@ -1014,47 +1034,70 @@ function TarifasTable({ tab, options, unidad, title }) {
       {open && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
       {error && <p className="error">{error}</p>}
       {loading && <p className="empty">Cargando…</p>}
-      {!loading && !error && rows.length === 0 && <p className="empty">Sin operaciones en {nomAct}.</p>}
-      {rows.length > 0 && (
+      {!loading && !error && tarifas.length === 0 && <p className="empty">Sin datos para el período.</p>}
+      {tarifas.length > 0 && (
         <div className="table-scroll">
           <table className="dash-tarifas">
             <thead>
-              <tr className="unidad">
-                <th />
-                <th>{unit}</th>
-                <th>{unit}</th>
-                <th colSpan={2} className="sep">Variación</th>
+              <tr>
+                <th rowSpan={2}>Tramo</th>
+                {periodos.map((p) => <th key={p} colSpan={3} className="periodo">{mesLabel(p)}</th>)}
               </tr>
               <tr>
-                <th>Tramo</th>
-                <th>{nomAnt}</th>
-                <th className="act">{nomAct}</th>
-                <th className="sep">{unit}</th>
-                <th>%</th>
+                {periodos.map((p) => (
+                  <Fragment key={p}>
+                    <th>Bs/m³</th>
+                    <th>USD/m³</th>
+                    <th className="tc">T/C</th>
+                  </Fragment>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {tarifas.map((r) => (
                 <tr key={r.tramo}>
                   <td className="tramo">{r.tramo}</td>
-                  <td className={r.ant == null ? 'na' : 'prev'}>{fmtT(r.ant)}</td>
-                  <td className="act">{fmtT(r.act)}</td>
-                  {celdasVariacion(r.dif, r.pct)}
+                  {periodos.map((p) => (
+                    <Fragment key={p}>
+                      <td className={r.bs[p] == null ? 'na' : ''}>{n(r.bs[p])}</td>
+                      <td className={r.usd[p] == null ? 'na' : ''}>{n(r.usd[p])}</td>
+                      <td className="tc">{n(tc[p], 4)}</td>
+                    </Fragment>
+                  ))}
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
                 <td>Promedio general</td>
-                <td>{fmtT(general.ant)}</td>
-                <td className="act">{fmtT(general.act)}</td>
-                {celdasVariacion(gDif, gPct)}
+                {periodos.map((p) => (
+                  <Fragment key={p}>
+                    <td>{n(general.bs[p])}</td>
+                    <td>{n(general.usd[p])}</td>
+                    <td />
+                  </Fragment>
+                ))}
               </tr>
             </tfoot>
           </table>
         </div>
       )}
     </CardFrame>
+  );
+}
+
+function DonutCard({ title, tab, options, dataKey, unit }) {
+  const [tipo, setTipo] = useState('todos');
+  return (
+    <ChartCard
+      title={title}
+      tab={tab}
+      options={options}
+      extra={{ tipo }}
+      renderKey={tipo}
+      extraTop={<div className="dash-frec-head"><TipoSeg value={tipo} onChange={setTipo} /></div>}
+      render={(el, d) => d3Donut(el, d[dataKey] || {}, unit)}
+    />
   );
 }
 
@@ -1372,31 +1415,30 @@ export default function DashboardSection({ canWrite }) {
         ))}
       </div>
 
-      <FrecuenciaAduanas tab={tab} options={options} />
+      <div className="dash-st">Diésel YPFB</div>
+      <YpfbComparacion tab={tab} options={options} />
+
+      <div className="dash-st">Volumen por Frontera</div>
+      <VolumenFronteraTable tab={tab} options={options} />
+
+      <div className="dash-st">Cadena de Suministro</div>
+      <div className="dash-row">
+        <div className="dash-half"><DonutCard title="Market Share por Proveedor" tab={tab} options={options} dataKey="share_proveedor" unit="M³" /></div>
+        <div className="dash-half"><DonutCard title="Volumen por Procedencia" tab={tab} options={options} dataKey="vol_procedencia" unit="M³" /></div>
+      </div>
+
+      <div className="dash-st">Logística</div>
+      <TarifasTable tab={tab} options={options} />
 
       <ChartCard title="Benchmarking de Precio Promedio ($/M³) por Importador" tab={tab} options={options} render={renderBenchmark} minHeight={400} />
 
       <div className="dash-st">Precio por Semana</div>
       <WeeklyTable tab={tab} options={options} />
 
+      <FrecuenciaAduanas tab={tab} options={options} />
+
       <div className="dash-st">Precio por Empresa (Bs/litro)</div>
-      <BubbleCard title="Precio Promedio por Empresa (Bs/litro)" tab={tab} options={options} marcadores={marcadores.empresa} canWrite={canWrite} onAplicar={aplicarMarcadores} />
-
-      <div className="dash-st">Logística</div>
-      <TarifasTable tab={tab} options={options} unidad="usd" title="Tarifa Flete Prom. por Tramo (USD/m³)" />
-      <TarifasTable tab={tab} options={options} unidad="bs" title="Tarifa Flete Prom. por Tramo (Bs/m³)" />
-
-      <div className="dash-st">Diésel YPFB</div>
-      <YpfbComparacion tab={tab} options={options} />
-
-      <div className="dash-st">Análisis por Importador</div>
-      <VolumenFronteraTable tab={tab} options={options} />
-
-      <div className="dash-st">Cadena de Suministro</div>
-      <div className="dash-row">
-        <div className="dash-half"><ChartCard title="Market Share por Proveedor" tab={tab} options={options} render={(el, d) => d3Donut(el, d.share_proveedor || {}, 'M³')} /></div>
-        <div className="dash-half"><ChartCard title="Volumen por Procedencia" tab={tab} options={options} render={(el, d) => d3Donut(el, d.vol_procedencia || {}, 'M³')} /></div>
-      </div>
+      <BubbleCard title="Comparativa de Precios (Bs/L) vs. Volúmenes (M³)" tab={tab} options={options} marcadores={marcadores.empresa} canWrite={canWrite} onAplicar={aplicarMarcadores} />
     </div>
   );
 }

@@ -285,6 +285,8 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 .dash-tarifas .eq { color: #9ca3af; }
 .dash-tarifas .sep, .dash-tarifas th.sep { border-left: 1px solid #e5e7eb; }
 .dash-tarifas tfoot td, .dash-volumen tfoot td { font-weight: 700; border-top: 2px solid #d1d5db; border-bottom: none; }
+.dash-tarifas th.periodo { text-align: center; border-left: 1px solid #e5e7eb; color: #374151; }
+.dash-tarifas td.tc, .dash-tarifas th.tc { color: #6b7280; }
 
 .dash-volumen th.fr { white-space: normal; min-width: 84px; }
 .dash-volumen .centro { text-align: center; }

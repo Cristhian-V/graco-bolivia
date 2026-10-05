@@ -226,6 +226,10 @@ function buildWhere(query) {
     }
   }
 
+  const tipo = query.tipo;
+  if (tipo === 'ypfb') conditions.push("importador_nit = '1020269020'");
+  else if (tipo === 'privado') conditions.push("COALESCE(importador_nit, '') <> '1020269020'");
+
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values };
 }
 
@@ -292,60 +296,79 @@ function condicionTipo(tipo) {
 }
 
 export async function getTarifasTramo(query) {
-  const unidad = query.unidad === 'bs' ? 'bs' : 'usd';
-  const costoCol = unidad === 'bs' ? 'flete_total_bs' : 'flete_total_usd';
   const anio = parseInt(query.anio, 10);
   const meses = splitLista(query.mes).map((m) => parseInt(m, 10)).filter((n) => Number.isInteger(n));
   const mes = meses.length ? meses[0] : null;
-  if (!Number.isInteger(anio) || !mes) return { tarifas: [] };
+  if (!Number.isInteger(anio) || !mes) return { periodos: [], tc: {}, general: { usd: {}, bs: {} }, tarifas: [] };
 
-  let antAnio = anio;
-  let antMes = mes - 1;
-  if (antMes < 1) { antMes = 12; antAnio -= 1; }
-  const periodoAct = `${anio}-${String(mes).padStart(2, '0')}`;
-  const periodoAnt = `${antAnio}-${String(antMes).padStart(2, '0')}`;
+  // Tres periodos: el mes en curso y los dos anteriores.
+  const periodos = [];
+  let y = anio;
+  let m = mes;
+  for (let k = 0; k < 3; k += 1) {
+    periodos.unshift(`${y}-${String(m).padStart(2, '0')}`);
+    m -= 1;
+    if (m < 1) { m = 12; y -= 1; }
+  }
 
   const conditions = [
-    `to_char(fecha, 'YYYY-MM') = ANY($2::text[])`,
-    `${costoCol} > 0`,
-    `cantidad_m3 > 0`,
+    `to_char(fecha, 'YYYY-MM') = ANY($1::text[])`,
     `NULLIF(tramo_flete, '') IS NOT NULL`,
   ];
-  const values = [periodoAct, [periodoAct, periodoAnt]];
-  let i = 3;
-
+  const values = [periodos];
+  let i = 2;
   const productos = splitLista(query.producto);
   if (productos.length) { conditions.push(`producto = ANY($${i}::text[])`); values.push(productos); i += 1; }
   const tipo = condicionTipo(query.tipo);
   if (tipo) conditions.push(tipo);
+  for (const [q, col] of [['importador', 'importador'], ['proveedor', 'proveedor'], ['procedencia', 'pais_procedencia'], ['aduana', 'aduana']]) {
+    const items = splitLista(query[q]);
+    if (items.length) { conditions.push(`${col} = ANY($${i}::text[])`); values.push(items); i += 1; }
+  }
+  const where = conditions.join(' AND ');
 
-  const sql = `
-    SELECT tramo_flete AS tramo,
-      CASE WHEN to_char(fecha, 'YYYY-MM') = $1 THEN 'act' ELSE 'ant' END AS per,
-      SUM(${costoCol}) AS costo,
-      SUM(cantidad_m3) AS vol
-    FROM detalles d
-    WHERE ${conditions.join(' AND ')}
-    GROUP BY tramo_flete, per`;
-  const { rows } = await pool.query(sql, values);
+  const [{ rows: tramoRows }, { rows: tcRows }] = await Promise.all([
+    pool.query(`
+      SELECT tramo_flete AS tramo, to_char(fecha, 'YYYY-MM') AS periodo,
+        SUM(flete_total_usd) FILTER (WHERE flete_total_usd > 0) AS usd,
+        SUM(cantidad_m3) FILTER (WHERE flete_total_usd > 0) AS vol_usd,
+        SUM(flete_total_bs) FILTER (WHERE flete_total_bs > 0) AS bs,
+        SUM(cantidad_m3) FILTER (WHERE flete_total_bs > 0) AS vol_bs
+      FROM detalles d
+      WHERE ${where}
+      GROUP BY tramo_flete, periodo`, values),
+    pool.query(`
+      SELECT to_char(fecha, 'YYYY-MM') AS periodo, AVG(tipo_cambio_trans) AS tc
+      FROM detalles d
+      WHERE ${where} AND tipo_cambio_trans IS NOT NULL
+      GROUP BY periodo`, values),
+  ]);
+
+  const tc = {};
+  for (const r of tcRows) tc[r.periodo] = r.tc != null ? Number(Number(r.tc).toFixed(4)) : null;
 
   const map = new Map();
-  let actCosto = 0;
-  let actVol = 0;
-  let antCosto = 0;
-  let antVol = 0;
-  for (const r of rows) {
-    if (!map.has(r.tramo)) map.set(r.tramo, { tramo: r.tramo, ant: null, act: null });
-    const costo = Number(r.costo);
-    const vol = Number(r.vol);
-    const val = vol > 0 ? Number((costo / vol).toFixed(2)) : null;
-    if (r.per === 'act') { map.get(r.tramo).act = val; actCosto += costo; actVol += vol; } else { map.get(r.tramo).ant = val; antCosto += costo; antVol += vol; }
+  const gu = {};
+  const gvu = {};
+  const gb = {};
+  const gvb = {};
+  for (const r of tramoRows) {
+    if (!map.has(r.tramo)) map.set(r.tramo, { tramo: r.tramo, usd: {}, bs: {} });
+    const t = map.get(r.tramo);
+    const p = r.periodo;
+    const vu = Number(r.vol_usd);
+    const vb = Number(r.vol_bs);
+    t.usd[p] = vu > 0 ? Number((Number(r.usd) / vu).toFixed(2)) : null;
+    t.bs[p] = vb > 0 ? Number((Number(r.bs) / vb).toFixed(2)) : null;
+    if (r.usd != null) { gu[p] = (gu[p] || 0) + Number(r.usd); gvu[p] = (gvu[p] || 0) + vu; }
+    if (r.bs != null) { gb[p] = (gb[p] || 0) + Number(r.bs); gvb[p] = (gvb[p] || 0) + vb; }
   }
-  const general = {
-    act: actVol > 0 ? Number((actCosto / actVol).toFixed(2)) : null,
-    ant: antVol > 0 ? Number((antCosto / antVol).toFixed(2)) : null,
-  };
-  return { tarifas: [...map.values()], general };
+  const general = { usd: {}, bs: {} };
+  for (const p of periodos) {
+    general.usd[p] = gvu[p] > 0 ? Number((gu[p] / gvu[p]).toFixed(2)) : null;
+    general.bs[p] = gvb[p] > 0 ? Number((gb[p] / gvb[p]).toFixed(2)) : null;
+  }
+  return { periodos, tc, general, tarifas: [...map.values()] };
 }
 
 export async function getVolumenFrontera(query) {
@@ -535,7 +558,7 @@ export async function getDashboardData(query) {
     kpiSql,
     grp(`SELECT importador AS label, ROUND(SUM((us_unitario + COALESCE(tarifa_flete_usd_m3, 0)) * cantidad_m3) / NULLIF(SUM(cantidad_m3), 0)::numeric, 2) AS valor`, 'valor DESC', 7),
     grp(`SELECT importador AS label, ROUND(SUM(cantidad_m3)::numeric, 2) AS valor`, 'valor DESC', 7),
-    grp(`SELECT proveedor AS label, ROUND(SUM(cantidad_m3)::numeric, 2) AS valor`, 'valor DESC', 7),
+    grp(`SELECT CASE WHEN proveedor ILIKE '%TRAFIGURA%' THEN 'TRAFIGURA' ELSE proveedor END AS label, ROUND(SUM(cantidad_m3)::numeric, 2) AS valor`, 'valor DESC', 7),
     grp(`SELECT pais_procedencia AS label, ROUND(SUM(cantidad_m3)::numeric, 2) AS valor`, 'valor DESC'),
     grp(`SELECT NULLIF(tramo_flete, '') AS label, ROUND(AVG(NULLIF(tarifa_flete_usd_m3, 0))::numeric, 2) AS valor`, 'valor DESC', 7),
     grp(`SELECT NULLIF(tramo_flete, '') AS label, ROUND(AVG(NULLIF(tarifa_flete_bob_m3, 0))::numeric, 2) AS valor`, 'valor DESC', 7),
