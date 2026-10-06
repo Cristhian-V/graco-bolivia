@@ -551,6 +551,7 @@ const REFERENCIAS = [
   { id: 'paises', label: 'Países', campos: [{ key: 'nombre', label: 'Nombre' }, { key: 'codigo_iso2', label: 'Código ISO2' }] },
   { id: 'incoterms', label: 'Incoterms', campos: [{ key: 'codigo', label: 'Código' }, { key: 'descripcion', label: 'Descripción' }] },
   { id: 'transportes', label: 'Transportes', campos: [{ key: 'nombre', label: 'Nombre' }] },
+  { id: 'destinos', label: 'Destinos', campos: [{ key: 'destino', label: 'Destino' }, { key: 'departamento', label: 'Departamento' }] },
 ];
 
 function ReferenciasSection() {

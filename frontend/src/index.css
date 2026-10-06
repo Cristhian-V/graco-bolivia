@@ -287,6 +287,19 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 .dash-tarifas tfoot td, .dash-volumen tfoot td { font-weight: 700; border-top: 2px solid #d1d5db; border-bottom: none; }
 .dash-tarifas th.periodo { text-align: center; border-left: 1px solid #e5e7eb; color: #374151; }
 .dash-tarifas td.tc, .dash-tarifas th.tc { color: #6b7280; }
+.dash-tarifas th.transp, .dash-tarifas td.transp { text-align: left; white-space: normal; min-width: 140px; }
+.dash-transp-btn {
+  border: none; background: none; padding: 2px 6px; border-radius: 6px;
+  font-size: 12px; color: #1d4ed8; cursor: pointer;
+}
+.dash-transp-btn:hover { background: #eff6ff; }
+.dash-tarifas-expand td { background: #fafbfc; text-align: left; white-space: normal; }
+.dash-transp-list { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.dash-transp-list span { white-space: nowrap; color: #4b5563; font-size: 12px; }
+.dash-nimp select {
+  padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 7px;
+  font-size: 11px; color: #374151; background: #fff; cursor: pointer;
+}
 
 .dash-volumen th.fr { white-space: normal; min-width: 84px; }
 .dash-volumen .centro { text-align: center; }

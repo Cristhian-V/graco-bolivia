@@ -241,6 +241,7 @@ const TABLAS_REFERENCIA = {
   paises: { cols: ['nombre', 'codigo_iso2'], required: ['nombre'] },
   incoterms: { cols: ['codigo', 'descripcion'], required: ['codigo'] },
   transportes: { cols: ['nombre'], required: ['nombre'] },
+  destinos: { cols: ['destino', 'departamento'], required: ['destino', 'departamento'] },
   aduanas: { cols: ['codigo_aduana', 'nombre', 'tipo', 'ciudad'], required: ['codigo_aduana', 'nombre'] },
   clientes: { cols: ['nit', 'nombre', 'activo'], required: ['nit', 'nombre'], activo: true },
 };
@@ -547,6 +548,7 @@ router.get('/combustibles/export', async (req, res, next) => {
       { name: 'paises', sql: 'SELECT nombre, codigo_iso2 FROM paises ORDER BY nombre', cols: ['nombre', 'codigo_iso2'] },
       { name: 'incoterms', sql: 'SELECT codigo, descripcion FROM incoterms ORDER BY codigo', cols: ['codigo', 'descripcion'] },
       { name: 'transportes', sql: 'SELECT nombre FROM transportes ORDER BY nombre', cols: ['nombre'] },
+      { name: 'destinos', sql: 'SELECT destino, departamento FROM destinos ORDER BY departamento, destino', cols: ['destino', 'departamento'] },
     ];
 
     for (const s of hojasRef) {

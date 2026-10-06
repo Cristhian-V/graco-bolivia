@@ -985,20 +985,29 @@ function TipoSeg({ value, onChange }) {
   );
 }
 
-function mesPrevio(m) {
-  return m === 1 ? 12 : m - 1;
+const UNIDADES = [
+  { id: 'bs', label: 'Bs' },
+  { id: 'usd', label: 'USD' },
+  { id: 'ambos', label: 'Ambos' },
+];
+
+function UnidadSeg({ value, onChange }) {
+  return (
+    <div className="dash-seg">
+      {UNIDADES.map((u) => (
+        <button key={u.id} type="button" className={value === u.id ? 'on' : ''} onClick={() => onChange(u.id)}>{u.label}</button>
+      ))}
+    </div>
+  );
 }
 
-function celdasVariacion(dif, pct) {
-  if (dif == null) return [<td key="v" className="na">–</td>, <td key="p" className="na">–</td>];
-  if (Math.round(dif) === 0) return [<td key="v" className="eq">0</td>, <td key="p" className="eq">= 0.0 %</td>];
+// Variación solo en valor (sin porcentaje): flecha, signo y color.
+function difCell(dif, key) {
+  if (dif == null) return <td key={key} className="na">–</td>;
+  if (Math.round(dif) === 0) return <td key={key} className="eq">0</td>;
   const up = dif > 0;
-  const cls = up ? 'up' : 'down';
   const s = up ? '+' : '−';
-  return [
-    <td key="v" className={cls}>{s}{fmt(Math.abs(dif), 0)}</td>,
-    <td key="p" className={cls}>{up ? '▲' : '▼'} {s}{fmt(Math.abs(pct), 1)} %</td>,
-  ];
+  return <td key={key} className={up ? 'up' : 'down'}>{up ? '▲' : '▼'} {s}{fmt(Math.abs(dif), 0)}</td>;
 }
 
 function TarifasTable({ tab, options }) {
@@ -1006,22 +1015,45 @@ function TarifasTable({ tab, options }) {
   const [filtro, setFiltro] = useState(defaultFiltro);
   const [open, setOpen] = useState(false);
   const [tipo, setTipo] = useState('todos');
-  const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'tarifas', tipo });
+  const [unidad, setUnidad] = useState('bs');
+  const [destino, setDestino] = useState('');
+  const [expandido, setExpandido] = useState(null);
+  const { data, loading, error } = useDashboardData(
+    tab, filtro, filters, { chart: 'tarifas', tipo, departamento: destino },
+  );
 
   const periodos = (data && data.periodos) || [];
   const tc = (data && data.tc) || {};
   const general = (data && data.general) || { usd: {}, bs: {} };
-  const ultimo = periodos[periodos.length - 1];
+  const pAct = periodos[periodos.length - 1];
+  const pPrev = periodos[periodos.length - 2];
+
+  const colsUnidad = unidad === 'bs' ? ['bs'] : unidad === 'usd' ? ['usd', 'tc'] : ['bs', 'usd'];
+  const colsVar = unidad === 'ambos' ? ['bs', 'usd'] : [unidad];
+  const nCols = 2 + periodos.length * colsUnidad.length + colsVar.length;
+
+  const ordenKey = unidad === 'usd' ? 'usd' : 'bs';
   const tarifas = ((data && data.tarifas) || [])
     .slice()
-    .sort((a, b) => (a.bs[ultimo] ?? Infinity) - (b.bs[ultimo] ?? Infinity));
+    .sort((a, b) => (a[ordenKey][pAct] ?? Infinity) - (b[ordenKey][pAct] ?? Infinity));
 
   const mesLabel = (p) => `${MES_ABBR[parseInt(p.slice(5, 7), 10) - 1]} ${p.slice(0, 4)}`;
   const n = (v, d = 0) => (v == null ? '–' : fmt(v, d));
+  const val = (r, u, p) => (u === 'bs' ? r.bs[p] : r.usd[p]);
+  const dif = (r, u) => {
+    const a = val(r, u, pPrev);
+    const b = val(r, u, pAct);
+    return a != null && b != null ? Math.round(b) - Math.round(a) : null;
+  };
+  const difGeneral = (u) => (general[u][pAct] != null && general[u][pPrev] != null
+    ? Math.round(general[u][pAct]) - Math.round(general[u][pPrev]) : null);
+
+  const etiquetaUnidad = unidad === 'bs' ? 'Bs/m³' : unidad === 'usd' ? 'USD/m³ · T/C' : 'Bs/m³ · USD/m³';
+  const destinosOpts = (options && options.departamento) || [];
 
   return (
     <CardFrame
-      title="Tarifa Flete Prom. por Tramo (Bs/m³ · USD/m³ · T/C)"
+      title={`Tarifa Flete Prom. por Tramo (${etiquetaUnidad})`}
       open={open}
       onToggle={() => setOpen((o) => !o)}
       active={hasActiveFilters(filters)}
@@ -1029,7 +1061,19 @@ function TarifasTable({ tab, options }) {
       setFiltro={setFiltro}
       options={options}
       singleMonth
-      headerExtra={<TipoSeg value={tipo} onChange={setTipo} />}
+      headerExtra={(
+        <div className="dash-frec-head">
+          <TipoSeg value={tipo} onChange={setTipo} />
+          <UnidadSeg value={unidad} onChange={setUnidad} />
+          <label className="dash-nimp">
+            Destino
+            <select value={destino} onChange={(e) => setDestino(e.target.value)}>
+              <option value="">Todos</option>
+              {destinosOpts.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
     >
       {open && <FilterPanel filters={filters} onChange={setFilters} options={options} />}
       {error && <p className="error">{error}</p>}
@@ -1039,44 +1083,95 @@ function TarifasTable({ tab, options }) {
         <div className="table-scroll">
           <table className="dash-tarifas">
             <thead>
-              <tr>
-                <th rowSpan={2}>Tramo</th>
-                {periodos.map((p) => <th key={p} colSpan={3} className="periodo">{mesLabel(p)}</th>)}
+              <tr className="unidad">
+                <th />
+                <th />
+                {periodos.map((p) => (
+                  <th key={p} colSpan={colsUnidad.length} className="periodo">{mesLabel(p)}</th>
+                ))}
+                <th colSpan={colsVar.length} className="periodo sep">Variación</th>
               </tr>
               <tr>
+                <th>Tramo</th>
+                <th className="transp">Transporte</th>
                 {periodos.map((p) => (
                   <Fragment key={p}>
-                    <th>Bs/m³</th>
-                    <th>USD/m³</th>
-                    <th className="tc">T/C</th>
+                    {colsUnidad.map((u) => (
+                      <th key={u} className={u === 'tc' ? 'tc' : ''}>
+                        {u === 'bs' ? 'Bs/m³' : u === 'usd' ? 'USD/m³' : 'T/C'}
+                      </th>
+                    ))}
                   </Fragment>
+                ))}
+                {colsVar.map((u) => (
+                  <th key={u} className="sep">{u === 'bs' ? 'Bs/m³' : 'USD/m³'}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {tarifas.map((r) => (
-                <tr key={r.tramo}>
-                  <td className="tramo">{r.tramo}</td>
-                  {periodos.map((p) => (
-                    <Fragment key={p}>
-                      <td className={r.bs[p] == null ? 'na' : ''}>{n(r.bs[p])}</td>
-                      <td className={r.usd[p] == null ? 'na' : ''}>{n(r.usd[p])}</td>
-                      <td className="tc">{n(tc[p], 4)}</td>
-                    </Fragment>
-                  ))}
-                </tr>
-              ))}
+              {tarifas.map((r) => {
+                const transportes = r.transportes || [];
+                return (
+                  <Fragment key={r.tramo}>
+                    <tr>
+                      <td className="tramo">{r.tramo}</td>
+                      <td className="transp">
+                        {transportes.length === 0 ? <span className="na">–</span>
+                          : transportes.length === 1 ? sl(transportes[0], 28)
+                            : (
+                              <button
+                                type="button"
+                                className="dash-transp-btn"
+                                onClick={() => setExpandido(expandido === r.tramo ? null : r.tramo)}
+                              >
+                                {transportes.length} transportes {expandido === r.tramo ? '▾' : '▸'}
+                              </button>
+                            )}
+                      </td>
+                      {periodos.map((p) => (
+                        <Fragment key={p}>
+                          {colsUnidad.map((u) => {
+                            const v = u === 'tc' ? tc[p] : val(r, u, p);
+                            return (
+                              <td key={u} className={v == null ? 'na' : (u !== 'tc' && p === pAct ? 'act' : '')}>
+                                {u === 'tc' ? n(v, 4) : n(v)}
+                              </td>
+                            );
+                          })}
+                        </Fragment>
+                      ))}
+                      {colsVar.map((u) => difCell(dif(r, u), u))}
+                    </tr>
+                    {expandido === r.tramo && transportes.length > 1 && (
+                      <tr className="dash-tarifas-expand">
+                        <td colSpan={nCols}>
+                          <div className="dash-transp-list">
+                            {transportes.map((t) => <span key={t}>{t}</span>)}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr>
                 <td>Promedio general</td>
+                <td />
                 {periodos.map((p) => (
                   <Fragment key={p}>
-                    <td>{n(general.bs[p])}</td>
-                    <td>{n(general.usd[p])}</td>
-                    <td />
+                    {colsUnidad.map((u) => {
+                      const v = u === 'tc' ? tc[p] : general[u][p];
+                      return (
+                        <td key={u} className={u !== 'tc' && p === pAct ? 'act' : ''}>
+                          {u === 'tc' ? n(v, 4) : n(v)}
+                        </td>
+                      );
+                    })}
                   </Fragment>
                 ))}
+                {colsVar.map((u) => difCell(difGeneral(u), u))}
               </tr>
             </tfoot>
           </table>
