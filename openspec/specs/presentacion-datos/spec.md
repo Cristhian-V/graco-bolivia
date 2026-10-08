@@ -352,7 +352,7 @@ El sistema SHALL presentar el market share por proveedor y el volumen por proced
 
 ### Requirement: Tabla comparativa de tarifa de flete por tramo
 
-El sistema SHALL presentar la tarifa de flete promedio por tramo como una única tabla con una fila por tramo y columnas por mes para el mes en curso y los dos meses anteriores. La tarifa de cada tramo SHALL ser el promedio ponderado por volumen (`Σcosto / Σvolumen`) y SHALL mostrarse por tramo tal cual viene, sin separar origen y destino. El sistema SHALL ofrecer un filtro de unidad con las opciones `Bs`, `USD` y `Ambos`, con `Bs` seleccionado por defecto, y el título de la tarjeta SHALL reflejar la unidad elegida. En modo `Bs` SHALL mostrar solo las columnas Bs/m³; en modo `USD` SHALL mostrar USD/m³ y el T/C promedio del mes (tipo de cambio del BCB); en modo `Ambos` SHALL mostrar Bs/m³ y USD/m³. La tabla SHALL permitir segmentar por `Todos`, `YPFB` y `Privado`, SHALL incluir una columna de variación del mes en curso respecto del mes inmediatamente anterior expresada solo en valor (sin porcentaje) en la unidad mostrada, y SHALL ofrecer un filtro de origen que limita los tramos a los del origen seleccionado (el lugar de embarque, por ejemplo `ILO`, `IQUIQUE` o `DESAGUADERO`). La tabla SHALL NOT incluir una columna de transporte.
+El sistema SHALL presentar la tarifa de flete promedio por tramo como una única tabla con una fila por tramo y columnas por mes para el mes en curso y los dos meses anteriores. La tarifa de cada tramo SHALL ser el promedio ponderado por volumen (`Σcosto / Σvolumen`) y SHALL mostrarse por tramo tal cual viene, sin separar origen y destino. El sistema SHALL ofrecer un filtro de unidad con las opciones `Bs`, `USD` y `Ambos`, con `Bs` seleccionado por defecto, y el título de la tarjeta SHALL reflejar la unidad elegida. En modo `Bs` SHALL mostrar solo las columnas Bs/m³; en modo `USD` SHALL mostrar USD/m³ y el T/C promedio del mes (tipo de cambio del BCB); en modo `Ambos` SHALL mostrar Bs/m³ y USD/m³. La tabla SHALL permitir segmentar por `Todos`, `YPFB` y `Privado`, SHALL incluir una columna de variación del mes en curso respecto del mes inmediatamente anterior expresada solo en valor (sin porcentaje) en la unidad mostrada, y SHALL ofrecer un filtro de país de origen que limita los tramos a los del país seleccionado (`pais_procedencia`). La tabla SHALL NOT incluir una columna de transporte.
 
 #### Scenario: Comparación mes actual vs anterior
 - **WHEN** se muestra la tabla de tarifa de flete por tramo
@@ -414,13 +414,13 @@ El sistema SHALL presentar la tarifa de flete promedio por tramo como una única
 - **WHEN** la tabla está en modo `Ambos`
 - **THEN** la variación se muestra como un subvalor por unidad bajo un encabezado de variación (Bs y USD), sin porcentaje
 
-#### Scenario: Filtro de origen
-- **WHEN** el usuario elige un origen en el filtro de origen
-- **THEN** la tabla muestra solo los tramos cuyo origen (lugar de embarque) coincide con el seleccionado
+#### Scenario: Filtro de país de origen
+- **WHEN** el usuario elige un país en el filtro de país de origen
+- **THEN** la tabla muestra solo los tramos cuyo `pais_procedencia` coincide con el seleccionado
 
-#### Scenario: Origen por defecto
-- **WHEN** se abre la tabla de tarifa de flete por tramo sin haber cambiado el filtro de origen
-- **THEN** se muestran los tramos de todos los orígenes
+#### Scenario: País de origen por defecto
+- **WHEN** se abre la tabla de tarifa de flete por tramo sin haber cambiado el filtro de país de origen
+- **THEN** se muestran los tramos de todos los países
 
 #### Scenario: Sin columna de transporte
 - **WHEN** se muestra la tabla de tarifa de flete por tramo

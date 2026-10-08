@@ -1016,9 +1016,9 @@ function TarifasTable({ tab, options }) {
   const [open, setOpen] = useState(false);
   const [tipo, setTipo] = useState('todos');
   const [unidad, setUnidad] = useState('bs');
-  const [origen, setOrigen] = useState('');
+  const [pais, setPais] = useState('');
   const { data, loading, error } = useDashboardData(
-    tab, filtro, filters, { chart: 'tarifas', tipo, origen },
+    tab, filtro, filters, { chart: 'tarifas', tipo, pais },
   );
 
   const periodos = (data && data.periodos) || [];
@@ -1047,7 +1047,7 @@ function TarifasTable({ tab, options }) {
     ? Math.round(general[u][pAct]) - Math.round(general[u][pPrev]) : null);
 
   const etiquetaUnidad = unidad === 'bs' ? 'Bs/m³' : unidad === 'usd' ? 'USD/m³ · T/C' : 'Bs/m³ · USD/m³';
-  const origenesOpts = (options && options.origen) || [];
+  const paisesOpts = (options && options.procedencia) || [];
 
   return (
     <CardFrame
@@ -1064,10 +1064,10 @@ function TarifasTable({ tab, options }) {
           <TipoSeg value={tipo} onChange={setTipo} />
           <UnidadSeg value={unidad} onChange={setUnidad} />
           <label className="dash-nimp">
-            Origen
-            <select value={origen} onChange={(e) => setOrigen(e.target.value)}>
+            País de origen
+            <select value={pais} onChange={(e) => setPais(e.target.value)}>
               <option value="">Todos</option>
-              {origenesOpts.map((d) => <option key={d} value={d}>{d}</option>)}
+              {paisesOpts.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </label>
         </div>
@@ -1082,7 +1082,6 @@ function TarifasTable({ tab, options }) {
           <table className="dash-tarifas">
             <thead>
               <tr className="unidad">
-                <th />
                 <th />
                 {periodos.map((p) => (
                   <th key={p} colSpan={colsUnidad.length} className="periodo">{mesLabel(p)}</th>
@@ -1128,7 +1127,6 @@ function TarifasTable({ tab, options }) {
             <tfoot>
               <tr>
                 <td>Promedio general</td>
-                <td />
                 {periodos.map((p) => (
                   <Fragment key={p}>
                     {colsUnidad.map((u) => {

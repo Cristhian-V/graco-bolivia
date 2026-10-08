@@ -241,7 +241,6 @@ export async function getDashboardFilters() {
     { key: 'proveedor', sql: 'SELECT DISTINCT proveedor FROM detalles WHERE proveedor IS NOT NULL ORDER BY proveedor' },
     { key: 'procedencia', sql: 'SELECT DISTINCT pais_procedencia AS procedencia FROM detalles WHERE pais_procedencia IS NOT NULL ORDER BY procedencia' },
     { key: 'aduana', sql: 'SELECT DISTINCT aduana FROM detalles WHERE aduana IS NOT NULL ORDER BY aduana' },
-    { key: 'origen', sql: "SELECT DISTINCT btrim(regexp_replace(tramo_flete, '\\s*[-–].*$', '')) AS origen FROM detalles WHERE NULLIF(tramo_flete, '') IS NOT NULL AND tramo_flete ~ '[-–]' ORDER BY origen" },
   ];
 
   const result = {};
@@ -326,10 +325,10 @@ export async function getTarifasTramo(query) {
     const items = splitLista(query[q]);
     if (items.length) { conditions.push(`${col} = ANY($${i}::text[])`); values.push(items); i += 1; }
   }
-  const origenes = splitLista(query.origen);
-  if (origenes.length) {
-    conditions.push(`btrim(regexp_replace(tramo_flete, '\\s*[-–].*$', '')) = ANY($${i}::text[])`);
-    values.push(origenes);
+  const paises = splitLista(query.pais);
+  if (paises.length) {
+    conditions.push(`pais_procedencia = ANY($${i}::text[])`);
+    values.push(paises);
     i += 1;
   }
   const where = conditions.join(' AND ');
