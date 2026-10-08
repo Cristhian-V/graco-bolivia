@@ -7,14 +7,14 @@ Ver `proposal.md` y los deltas de `presentacion-datos` y `referencias`. La tabla
 **Goals:**
 - Acotar la unidad mostrada (Bs / USD / Ambos) y la columna T/C.
 - Recuperar la variación en valor (sin porcentaje).
-- Filtrar por departamento de destino con una tabla de referencia mantenible.
-- Ver las empresas de transporte por tramo.
+- Filtrar por origen (lugar de embarque, por ejemplo `ILO`, `IQUIQUE`, `DESAGUADERO`).
 
 **Non-Goals:**
 - No separar origen y destino en columnas.
 - No tocar el scraper ni `detalles`.
 - No cambiar la lógica de tarifa ponderada ni el segmentado por tipo.
-- El filtro de destino no aplica a otras tablas/gráficos.
+- No incluir columna de transporte.
+- El filtro de origen no aplica a otras tablas/gráficos.
 
 ## Decisions
 
@@ -30,16 +30,16 @@ Se reactiva `celdasVariacion`, usándolo solo para el valor (se descarta el porc
 
 - Alternativa: una variación por mes. Descartada por el pedido de "una sola columna".
 
-### D3 — Filtro de destino con tabla `destinos`
+### D3 — Filtro de origen
 
-Nueva tabla `destinos (destino text PRIMARY KEY, departamento text NOT NULL)` sembrada con los 9 departamentos (el `destino` crudo es `LA PAZ`, `SANTA CRUZ`, `POTOSI`, …). El destino de un tramo se extrae con `btrim(regexp_replace(tramo_flete, '^.*[-–]\s*', ''))` (toma lo que sigue al último guion, válido para orígenes compuestos como `BATON ROUGE -LOUISIANA - LA PAZ`). El filtro por departamento se implementa con un `EXISTS`/subconsulta contra `destinos`. Las opciones del selector son los `departamento` distintos de `destinos`, expuestos desde `GET /api/dashboard/filters` (clave `departamento`).
+El origen de un tramo se extrae de `tramo_flete` como el texto anterior al primer guion: `btrim(regexp_replace(tramo_flete, '\s*[-–].*$', ''))`. El filtro por origen aplica `= ANY(...)` sobre esa expresión. Las opciones del selector son los orígenes distintos derivados de `detalles`, expuestos desde `GET /api/dashboard/filters` (clave `origen`).
 
-- Alternativa: mapeo fijo en código. Descartada: el usuario pidió mantenerlo desde Referencias (por si aparecen alias como `SCZ`).
+- Alternativa: tabla de referencia de orígenes. Descartada: los orígenes se derivan de los datos.
 - Alternativa: parsear en el frontend. Descartada: el filtro debe aplicarse en SQL.
 
-### D4 — Columna de transporte
+### D4 — Sin columna de transporte
 
-`getTarifasTramo` agrega `string_agg(DISTINCT NULLIF(BTRIM(transporte), ''), ' | ') AS transportes` por tramo, sobre los 3 períodos (mismos filtros). El frontend muestra: 1 nombre → el nombre; >1 → `N transportes` con expansión de fila (patrón de `WeeklyTable`); 0 → `–`. Columna inmediatamente después de Tramo.
+Se descarta la columna de transporte (se decidió quitarla). `getTarifasTramo` no agrega transportes y la tabla no la muestra.
 
 ### D5 — Registro de `destinos` en Referencias
 
@@ -51,15 +51,14 @@ Nuevo `db/init/014_destinos.sql` idempotente (`CREATE TABLE IF NOT EXISTS` + `IN
 
 ## Risks / Trade-offs
 
-- [Muchos transportes por tramo] → celda colapsada con conteo y expansión de fila; no ensancha la tabla.
-- [Destino no mapeado en `destinos`] → aparece solo en `Todos`; se resuelve agregándolo en Referencias.
-- [Orígenes con guiones] → se toma el destino tras el último guion, que es correcto para los datos actuales (verificado con las 47 filas).
+- [Origen no listado] → el origen se deriva de `tramo_flete`, así que aparece si hay datos.
+- [Orígenes con guiones compuestos] → se toma el texto anterior al primer guion.
 - [Ancho de tabla en modo `Ambos` con 3 meses] → sigue con scroll horizontal y primera columna fija.
 
 ## Migration Plan
 
-1. DB: `db/init/014_destinos.sql` (tabla + seed de los 9 departamentos).
-2. Backend: `getTarifasTramo` (transporte + filtro por departamento de destino), `/dashboard/filters` (opciones de departamento), `TABLAS_REFERENCIA` y export de referencias.
-3. Frontend: `TarifasTable` (filtro de unidad, columnas, variación, filtro destino, transporte expandible), `REFERENCIAS` en `App.jsx`, estilos en `index.css`.
-4. Verificar: filtros de unidad y destino, variación, columna y expansión de transporte, alta de `destinos` en Referencias.
-5. Rollback: quitar la tabla `destinos` y revertir los archivos de frontend/backend; sin datos afectados.
+1. DB: `db/init/014_destinos.sql` (tabla + seed de los 9 departamentos) — se mantiene la referencia `destinos`.
+2. Backend: `getTarifasTramo` (sin transportes; filtro por origen), `/dashboard/filters` (opciones de origen), `TABLAS_REFERENCIA` y export de referencias.
+3. Frontend: `TarifasTable` (filtro de unidad, columnas, variación, filtro de origen), `REFERENCIAS` en `App.jsx`, estilos en `index.css`.
+4. Verificar: filtros de unidad y origen, variación, alta de `destinos` en Referencias.
+5. Rollback: revertir los archivos de frontend/backend; la tabla `destinos` queda sin uso.

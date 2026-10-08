@@ -241,7 +241,7 @@ export async function getDashboardFilters() {
     { key: 'proveedor', sql: 'SELECT DISTINCT proveedor FROM detalles WHERE proveedor IS NOT NULL ORDER BY proveedor' },
     { key: 'procedencia', sql: 'SELECT DISTINCT pais_procedencia AS procedencia FROM detalles WHERE pais_procedencia IS NOT NULL ORDER BY procedencia' },
     { key: 'aduana', sql: 'SELECT DISTINCT aduana FROM detalles WHERE aduana IS NOT NULL ORDER BY aduana' },
-    { key: 'departamento', sql: 'SELECT DISTINCT departamento FROM destinos ORDER BY departamento' },
+    { key: 'origen', sql: "SELECT DISTINCT btrim(regexp_replace(tramo_flete, '\\s*[-–].*$', '')) AS origen FROM detalles WHERE NULLIF(tramo_flete, '') IS NOT NULL AND tramo_flete ~ '[-–]' ORDER BY origen" },
   ];
 
   const result = {};
@@ -326,10 +326,10 @@ export async function getTarifasTramo(query) {
     const items = splitLista(query[q]);
     if (items.length) { conditions.push(`${col} = ANY($${i}::text[])`); values.push(items); i += 1; }
   }
-  const departamentos = splitLista(query.departamento);
-  if (departamentos.length) {
-    conditions.push(`btrim(regexp_replace(tramo_flete, '^.*[-–]\\s*', '')) IN (SELECT destino FROM destinos WHERE departamento = ANY($${i}::text[]))`);
-    values.push(departamentos);
+  const origenes = splitLista(query.origen);
+  if (origenes.length) {
+    conditions.push(`btrim(regexp_replace(tramo_flete, '\\s*[-–].*$', '')) = ANY($${i}::text[])`);
+    values.push(origenes);
     i += 1;
   }
   const where = conditions.join(' AND ');
@@ -340,11 +340,12 @@ export async function getTarifasTramo(query) {
         SUM(flete_total_usd) FILTER (WHERE flete_total_usd > 0) AS usd,
         SUM(cantidad_m3) FILTER (WHERE flete_total_usd > 0) AS vol_usd,
         SUM(flete_total_bs) FILTER (WHERE flete_total_bs > 0) AS bs,
-        SUM(cantidad_m3) FILTER (WHERE flete_total_bs > 0) AS vol_bs,
-        string_agg(DISTINCT NULLIF(BTRIM(transporte), ''), ' | ') AS transportes
+        SUM(cantidad_m3) FILTER (WHERE flete_total_bs > 0) AS vol_bs
       FROM detalles d
       WHERE ${where}
-      GROUP BY tramo_flete, periodo`, values),
+      GROUP BY tramo_flete, periodo
+      HAVING SUM(flete_total_usd) FILTER (WHERE flete_total_usd > 0) IS NOT NULL
+          OR SUM(flete_total_bs) FILTER (WHERE flete_total_bs > 0) IS NOT NULL`, values),
     pool.query(`
       SELECT to_char(fecha, 'YYYY-MM') AS periodo, AVG(tipo_cambio_trans) AS tc
       FROM detalles d
@@ -361,18 +362,13 @@ export async function getTarifasTramo(query) {
   const gb = {};
   const gvb = {};
   for (const r of tramoRows) {
-    if (!map.has(r.tramo)) map.set(r.tramo, { tramo: r.tramo, usd: {}, bs: {}, transportes: new Set() });
+    if (!map.has(r.tramo)) map.set(r.tramo, { tramo: r.tramo, usd: {}, bs: {} });
     const t = map.get(r.tramo);
     const p = r.periodo;
     const vu = Number(r.vol_usd);
     const vb = Number(r.vol_bs);
     t.usd[p] = vu > 0 ? Number((Number(r.usd) / vu).toFixed(2)) : null;
     t.bs[p] = vb > 0 ? Number((Number(r.bs) / vb).toFixed(2)) : null;
-    if (r.transportes) {
-      for (const nombre of String(r.transportes).split(' | ')) {
-        if (nombre) t.transportes.add(nombre);
-      }
-    }
     if (r.usd != null) { gu[p] = (gu[p] || 0) + Number(r.usd); gvu[p] = (gvu[p] || 0) + vu; }
     if (r.bs != null) { gb[p] = (gb[p] || 0) + Number(r.bs); gvb[p] = (gvb[p] || 0) + vb; }
   }
@@ -381,7 +377,7 @@ export async function getTarifasTramo(query) {
     general.usd[p] = gvu[p] > 0 ? Number((gu[p] / gvu[p]).toFixed(2)) : null;
     general.bs[p] = gvb[p] > 0 ? Number((gb[p] / gvb[p]).toFixed(2)) : null;
   }
-  const tarifas = [...map.values()].map((t) => ({ ...t, transportes: [...t.transportes].sort() }));
+  const tarifas = [...map.values()];
   return { periodos, tc, general, tarifas };
 }
 

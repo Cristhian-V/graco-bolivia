@@ -6,9 +6,8 @@ La tabla de tarifa de flete por tramo muestra en cada mes las columnas Bs/m³, U
 
 - **Filtro de unidad** en la tabla de tarifas: segmentado **Bs · USD · Ambos**, con **default `Bs`**, y el título de la tarjeta cambia según el modo. La columna **T/C solo se muestra en modo `USD`**.
 - **Variación recuperada, solo en valor**: una sola columna de variación (mes actual vs mes inmediatamente anterior), en la unidad mostrada, con flecha y signo (▲ sube = rojo, ▼ baja = verde) y `–` sin mes anterior. En modo `Ambos` la variación se agrupa bajo un encabezado con un subvalor por unidad (Bs y USD). **BREAKING** respecto de la spec vigente, que prohíbe columnas de variación.
-- **Filtro por destino** (departamento): nuevo selector con los 9 departamentos más `Todos`. Al elegir uno, la tabla lista los tramos cuyo destino corresponde a ese departamento. Aplica **solo a la tabla de tarifas**.
+- **Filtro por origen**: nuevo selector con los orígenes (lugares de embarque, por ejemplo `ILO`, `IQUIQUE`, `DESAGUADERO`). Al elegir uno, la tabla lista los tramos de ese origen. Aplica **solo a la tabla de tarifas**.
 - **Nueva tabla de referencia `destinos`** (`destino`, `departamento`) editable desde Referencias, con la carga inicial desde la base (9 destinos actuales, todos mapeados).
-- **Columna Transporte** después de Tramo: agrega las empresas de transporte del tramo sobre los tres meses mostrados; si es una, muestra el nombre; si son varias, muestra el conteo y **expande la fila** con la lista; sin transporte, `–`.
 
 ## Capabilities
 
