@@ -1276,6 +1276,24 @@ function VolumenFronteraTable({ tab, options }) {
 
 // ==================== DIÉSEL YPFB (comparación por proveedor) ====================
 
+// Clave canónica de un proveedor para agrupar distintas configuraciones del mismo
+// nombre (mayúsculas, tildes, puntos y variantes societarias). Las variantes de
+// TRAFIGURA se agrupan en una sola.
+function claveProveedor(nombre) {
+  if (!nombre) return 'SIN PROVEEDOR';
+  const up = String(nombre)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+  return up.includes('TRAFIGURA') ? 'TRAFIGURA' : up;
+}
+
+function mostrarProveedor(nombre) {
+  if (!nombre) return 'Sin proveedor';
+  const up = String(nombre).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (up.includes('TRAFIGURA')) return 'TRAFIGURA';
+  return String(nombre).replace(/\s+/g, ' ').trim();
+}
+
 function YpfbComparacion({ tab, options }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [filtro, setFiltro] = useState(defaultFiltro);
@@ -1313,9 +1331,9 @@ function YpfbComparacion({ tab, options }) {
   const porProv = new Map();
   const total = acc();
   filtradas.forEach((d) => {
-    const p = d.proveedor || 'Sin proveedor';
-    if (!porProv.has(p)) porProv.set(p, { prov: p, a: acc(), sum: new Map() });
-    const t = porProv.get(p);
+    const clave = claveProveedor(d.proveedor);
+    if (!porProv.has(clave)) porProv.set(clave, { prov: mostrarProveedor(d.proveedor), a: acc(), sum: new Map() });
+    const t = porProv.get(clave);
     const pais = d.pais_procedencia || 'Sin país';
     if (!t.sum.has(pais)) t.sum.set(pais, { pais, a: acc() });
     add(t.a, d);
@@ -1335,7 +1353,6 @@ function YpfbComparacion({ tab, options }) {
     <td key={`v${key}`} className="sep">{fmt(p.vol, 0)}</td>,
     <td key={`p${key}`}>{fmt(p.premio, 2)}</td>,
     <td key={`f${key}`}>{fmt(p.flete, 2)}</td>,
-    <td key={`u${key}`} className="precio">{fmt(p.precio, 2)}</td>,
   ];
 
   const header = (
@@ -1384,7 +1401,6 @@ function YpfbComparacion({ tab, options }) {
                 <th className="sep">Volumen (m³)</th>
                 <th>Premio (USD/m³)</th>
                 <th>Flete (USD/m³)</th>
-                <th className="precio">Precio unitario {inc} (USD/m³)</th>
               </tr>
             </thead>
             <tbody>
