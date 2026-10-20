@@ -1461,7 +1461,33 @@ function YpfbComparacion({ tab, options }) {
   incluidas.forEach((d) => add(total, d));
   const mercado = prom(total);
 
-  const pfsTxt = (pts) => [...new Set(pts.map((d) => d.nro_proforma).filter(Boolean))].join(' · ') || '–';
+  const pfsLinks = (pts) => {
+    const vistos = new Set();
+    const items = [];
+    for (const d of pts) {
+      const num = d.nro_proforma;
+      if (!num || vistos.has(num)) continue;
+      vistos.add(num);
+      if (d.doc_id != null && d.combustible_id != null && d.doc_disponible) {
+        items.push(
+          <a
+            key={`pf-${num}-${d.doc_id}`}
+            className="dash-ypfb-link"
+            href={`/api/combustibles/${d.combustible_id}/documentos/${d.doc_id}/archivo`}
+            target="_blank"
+            rel="noreferrer"
+            title={d.doc_nombre ? `Descargar ${d.doc_nombre}` : `Descargar factura ${num}`}
+          >
+            {num}
+          </a>,
+        );
+      } else {
+        items.push(<span key={`pf-${num}-${d.dim_dam}`}>{num}</span>);
+      }
+    }
+    if (!items.length) return '–';
+    return items.flatMap((el, i) => (i ? [' · ', el] : [el]));
+  };
   const pfCount = (pts) => new Set(pts.map((d) => d.nro_proforma).filter(Boolean)).size;
 
   const celdas = (p, key, ruta) => [
@@ -1640,7 +1666,7 @@ function YpfbComparacion({ tab, options }) {
                     <td className="left na">
                       {suministro === 'todos'
                         ? `${r.puntos.length} punto${r.puntos.length === 1 ? '' : 's'} · ${pfCount(r.puntos)} proforma${pfCount(r.puntos) === 1 ? '' : 's'}`
-                        : pfsTxt(r.puntos)}
+                        : pfsLinks(r.puntos)}
                     </td>
                     {celdas(r.p, `p${r.prov}`)}
                   </tr>
@@ -1653,7 +1679,7 @@ function YpfbComparacion({ tab, options }) {
                           {ruta ? <span className="dash-ypfb-pill">{ruta.frontera}</span> : null}
                           {s.sinPrecio > 0 ? <span className="dash-ypfb-pill w">{s.sinPrecio} sin precio</span> : null}
                         </td>
-                        <td className="left pfs">{pfsTxt(s.puntos)}</td>
+                        <td className="left pfs">{pfsLinks(s.puntos)}</td>
                         {celdas(s.p, `s${r.prov}${s.pais}`, ruta)}
                       </tr>
                     );

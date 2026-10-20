@@ -427,9 +427,21 @@ export async function getDieselYpfb(query) {
     pool.query(`
       SELECT d.dim_dam, d.proveedor, d.pais_procedencia, d.incoterm, d.fecha,
         d.cantidad_m3 AS volumen,
-        y.nro_proforma, y.premio, y.flete, y.precio_unitario
+        COALESCE(NULLIF(y.nro_proforma, ''),
+          NULLIF(trim(regexp_replace(regexp_replace(doc.num, '^#\\s*', ''), '\\s+YPFB\\s*$', '', 'i')), '')
+        ) AS nro_proforma,
+        y.premio, y.flete, y.precio_unitario,
+        (SELECT c.id FROM combustibles c WHERE c.dim_dam = d.dim_dam) AS combustible_id,
+        doc.id AS doc_id, doc.nombre_archivo AS doc_nombre,
+        (doc.url IS NOT NULL OR doc.ruta_archivo IS NOT NULL) AS doc_disponible
       FROM detalles d
       LEFT JOIN ypfb_proformas y ON y.dim_dam = d.dim_dam
+      LEFT JOIN LATERAL (
+        SELECT dd.id, dd.num, dd.nombre_archivo, dd.url, dd.ruta_archivo
+        FROM documentos_despacho dd
+        WHERE dd.dim_dam = d.dim_dam AND dd.tipo = 'CM-003'
+        ORDER BY dd.id LIMIT 1
+      ) doc ON true
       WHERE ${conditions.join(' AND ')}
       ORDER BY d.proveedor, d.pais_procedencia, d.fecha
     `, base.values),
@@ -446,6 +458,10 @@ export async function getDieselYpfb(query) {
       fecha: r.fecha,
       volumen: r.volumen != null ? Number(r.volumen) : null,
       nro_proforma: r.nro_proforma,
+      combustible_id: r.combustible_id != null ? Number(r.combustible_id) : null,
+      doc_id: r.doc_id != null ? Number(r.doc_id) : null,
+      doc_nombre: r.doc_nombre,
+      doc_disponible: Boolean(r.doc_disponible),
       premio: r.premio != null ? Number(r.premio) : null,
       flete: r.flete != null ? Number(r.flete) : null,
       precio_unitario: r.precio_unitario != null ? Number(r.precio_unitario) : null,

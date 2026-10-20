@@ -42,3 +42,10 @@
 - [x] 7.2 Completar `nro_proforma` desde el CM-003 para los registros de YPFB sin proforma, con botón en Combustibles y ejecución en la corrida; verificar que el gráfico muestre los números
 - [x] 7.3 Calcular el Precio unitario como premio + flete en la tabla y en la vista Premio y flete; verificar con el registro 300444 (189 + 140 = 329.00)
 - [x] 7.4 Usar flete 0 por defecto para países de procedencia sin tarifas YPFB (por ejemplo Estados Unidos), manteniendo el flete de la proforma para países con tarifas sin tramo seleccionado
+
+## 8. Enlaces de proforma
+
+- [x] 8.1 Agregar `combustible_id`, `doc_id`, `doc_nombre`, `doc_disponible` y el respaldo del número desde `CM-003` en `getDieselYpfb`; verificar la respuesta de `/dashboard/data?chart=diesel-ypfb`
+- [x] 8.2 Validar en `/combustibles/:id/documentos/:docId/archivo` que el documento pertenezca al combustible; verificar 404 con un id incorrecto y 302/200 con el correcto
+- [x] 8.3 Renderizar los números de proforma como enlaces en una pestaña nueva y como texto si no hay archivo; verificar en la UI
+- [x] 8.4 Ejecutar `openspec validate` y `npm run build`; verificar que ambos terminan sin errores

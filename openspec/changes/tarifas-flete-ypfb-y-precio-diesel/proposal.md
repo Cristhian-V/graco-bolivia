@@ -12,11 +12,12 @@ YPFB actualiza periódicamente las tarifas flete PAC-711 que aplica con sus prov
 - Adecuación del gráfico **Diésel YPFB · Comparación de precio unitario por proveedor (USD/m³)** al modelo `diesel_ypfb_precio_flete.html`:
   - selector de tramo por país alimentado por las tarifas cargadas;
   - tipo de cambio del día desde `tipo_cambio`, editable;
-  - para DAP/DPU, flete = tarifa Bs/m³ ÷ TC; para FCA se mantiene el flete de la proforma;
+  - para DAP/DPU, flete = tarifa Bs/m³ ÷ TC; para FCA y países con tarifas sin tramo se mantiene el flete de la proforma; los países sin tarifas usan 0;
   - vista **Precio unitario** y vista **Premio y flete** (producto, premio y flete);
   - aviso y opción de incluir/excluir registros sin precio;
   - filtros híbridos: se conserva el panel global actual y se agregan los controles del encabezado del modelo;
-  - sin filtro de modalidad y limitado a YPFB (no incluye importadores privados).
+  - sin filtro de modalidad y limitado a YPFB (no incluye importadores privados);
+  - los números de proforma serán enlaces para descargar la factura `CM-003`; si no hay número guardado, se usa el del `CM-003`, y si no hay archivo se muestra como texto.
 
 ## Capabilities
 
@@ -33,4 +34,4 @@ YPFB actualiza periódicamente las tarifas flete PAC-711 que aplica con sus prov
 - **Backend**: nuevo servicio y rutas para listar, previsualizar/aplicar el Excel y consultar resúmenes; ampliación de la consulta de diésel YPFB para entregar tarifas vigentes y tipo de cambio; control de acceso por rol.
 - **Frontend**: nueva sección en `App.jsx`/`api.js`, adecuación de `YpfbComparacion` en `DashboardSection.jsx` y estilos asociados.
 - **Dependencias**: se reutilizan SheetJS/ExcelJS ya presentes; no se agregan librerías.
-- **Compatibilidad**: sin tarifas cargadas el gráfico sigue funcionando con el flete de la proforma; no hay cambios disruptivos.
+- **Compatibilidad**: sin tarifas cargadas el flete por defecto es 0; los países con tarifas y sin tramo seleccionado usan el flete de la proforma; no hay cambios disruptivos.

@@ -94,6 +94,12 @@ Se agrega la vista del modelo con métricas agregadas (premio y flete promedio, 
 
 Se agrega `db/init/015_tarifas_flete_ypfb.sql`, idempotente, con la tabla y sus índices (`vigente_desde`, ruta). No se siembran datos.
 
+### 10. Enlaces de proforma
+
+`getDieselYpfb` agrega `combustible_id`, `doc_id`, `doc_nombre` y `doc_disponible` por fila mediante `LEFT JOIN combustibles` y un `LEFT JOIN LATERAL` al primer `CM-003` del DIM. Si `ypfb_proformas.nro_proforma` está vacío, se usa el `num` del `CM-003` normalizado. El frontend muestra cada número único como enlace al endpoint existente `/api/combustibles/:id/documentos/:docId/archivo` en una pestaña nueva; sin documento o sin archivo, muestra el número como texto. El endpoint de descarga valida que el documento pertenezca al combustible (`c.dim_dam = dd.dim_dam`).
+
+Alternativa considerada: un endpoint nuevo `/documentos/:docId/archivo`; se descarta para reutilizar el existente y su allowlist para `presentacion`.
+
 ## Risks / Trade-offs
 
 - **Poca data de premio/flete (1 de 24 registros)** → el gráfico mostrará promedios basados en pocos registros y muchos “sin precio”. Mitigación: aviso explícito, vista de desglose y la carga de premio/flete sigue por la edición existente.
@@ -104,6 +110,7 @@ Se agrega `db/init/015_tarifas_flete_ypfb.sql`, idempotente, con la tabla y sus 
 - **TC del día para meses históricos** → el TC no corresponde al mes mostrado. Es la decisión del usuario; se muestra el TC usado junto con la vigencia de la tarifa.
 - **Allowlist de lectura** → ampliar `lecturaPermitida` es sensible. Se limita a GET y los POST siguen exigiendo `admin`.
 - **Encabezados del Excel con variantes** → se normalizan, pero un cambio de estructura puede fallar. Mitigación: validación explícita de columnas y errores por fila.
+- **Documentos CM-003 con URL externa de SUMA** → el endpoint redirige a SUMA; si SUMA exige sesión, la descarga puede fallar. Mitigación: se reutiliza el mismo endpoint que ya usa Combustibles y se muestra el número como texto si no hay archivo.
 
 ## Migration Plan
 

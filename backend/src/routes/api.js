@@ -405,8 +405,11 @@ router.get('/combustibles/:id/documentos', async (req, res, next) => {
 router.get('/combustibles/:id/documentos/:docId/archivo', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      'SELECT ruta_archivo, nombre_archivo, url FROM documentos_despacho WHERE id = $1',
-      [req.params.docId],
+      `SELECT dd.ruta_archivo, dd.nombre_archivo, dd.url
+       FROM documentos_despacho dd
+       JOIN combustibles c ON c.dim_dam = dd.dim_dam
+       WHERE dd.id = $1 AND c.id = $2`,
+      [req.params.docId, req.params.id],
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Documento no encontrado' });
     const { ruta_archivo: ruta, nombre_archivo: nombre, url } = rows[0];

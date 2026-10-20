@@ -500,3 +500,6 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 .dash-ypfb-comp .p { background: #3358e0; }
 .dash-ypfb-comp .f { background: #e0902b; }
 .dash-ypfb-comp.empty { background: none; border: 1px dashed #d1d5db; color: #6b7280; font-size: 11px; align-items: center; padding-inline: 10px; }
+.dash-ypfb-link { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
+.dash-ypfb-link:hover { color: #1d4ed8; }
+.dash-ypfb-link::after { content: ' ↗'; font-size: 10px; }

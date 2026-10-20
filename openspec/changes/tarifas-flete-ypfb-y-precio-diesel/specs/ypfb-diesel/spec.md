@@ -2,7 +2,7 @@
 
 ### Requirement: Comparación de precio unitario por proveedor (Diésel YPFB)
 
-El sistema SHALL presentar, después de la tabla de tarifa de flete por tramo en Bs/m³, una sección de comparación de diésel de YPFB por proveedor cuyas columnas son Proveedor, N.º proforma, Volumen (m³), Premio (USD/m³), Flete (USD/m³) y Precio unitario (USD/m³), agrupadas por proveedor con sub-filas por `pais_procedencia`, con una fila final de promedio YPFB ponderado por volumen. La sección SHALL ofrecer filtros de Incoterm, Suministro (país de procedencia), mes y año, y SHALL ordenar los proveedores del precio unitario más bajo al más alto. Los valores SHALL ser el promedio ponderado por volumen. La sección SHALL limitarse a registros de YPFB (NIT `1020269020`) y producto `DIESEL`.
+El sistema SHALL presentar, después de la tabla de tarifa de flete por tramo en Bs/m³, una sección de comparación de diésel de YPFB por proveedor cuyas columnas son Proveedor, N.º proforma, Volumen (m³), Premio (USD/m³), Flete (USD/m³) y Precio unitario (USD/m³), agrupadas por proveedor con sub-filas por `pais_procedencia`, con una fila final de promedio YPFB ponderado por volumen. La sección SHALL ofrecer filtros de Incoterm, Suministro (país de procedencia), mes y año, y SHALL ordenar los proveedores del precio unitario más bajo al más alto. Los valores SHALL ser el promedio ponderado por volumen. La sección SHALL limitarse a registros de YPFB (NIT `1020269020`) y producto `DIESEL`. El número de proforma SHALL mostrarse como enlace para descargar la factura `CM-003` cuando exista el documento con archivo; si no existe o no tiene archivo, SHALL mostrarse como texto. Si no hay `nro_proforma` guardado y existe un `CM-003`, SHALL usarse el número del `CM-003`.
 
 Además, el sistema SHALL:
 
@@ -22,6 +22,18 @@ Además, el sistema SHALL:
 #### Scenario: Proforma completada desde la factura comercial
 - **WHEN** un registro de YPFB no tiene `nro_proforma` y existe una factura comercial `CM-003` asociada
 - **THEN** el sistema completa el número de proforma desde el `CM-003` y el gráfico lo muestra
+
+#### Scenario: Número de proforma enlazado a la factura
+- **WHEN** un registro del gráfico tiene número de proforma y un documento `CM-003` con archivo
+- **THEN** el número se muestra como enlace para descargar la factura en una pestaña nueva
+
+#### Scenario: Proforma sin archivo
+- **WHEN** el número de proforma no tiene un `CM-003` asociado o el documento no tiene archivo
+- **THEN** el número se muestra como texto, sin enlace
+
+#### Scenario: Respaldo del número desde CM-003
+- **WHEN** `ypfb_proformas.nro_proforma` está vacío y existe un `CM-003` para el registro
+- **THEN** el gráfico muestra el número del `CM-003` y lo enlaza a su factura
 
 #### Scenario: Precio unitario como premio más flete
 - **WHEN** se muestra la columna Precio unitario
