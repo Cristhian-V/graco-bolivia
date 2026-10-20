@@ -47,7 +47,7 @@ Alternativas consideradas:
 
 ### 2. Consulta de la tarifa vigente
 
-La sección puede consultar una fecha histórica: se toma la última `vigente_desde <= d` y, dentro de esa versión, solo las rutas `activo = true`. El gráfico, en cambio, usa siempre la **última versión cargada**, porque la tarifa rige desde su carga hasta que YPFB sube una nueva y no depende del mes que se esté mostrando. Si no hay ninguna versión, no se ofrecen tramos y el gráfico usa el flete de la proforma.
+La sección puede consultar una fecha histórica: se toma la última `vigente_desde <= d` y, dentro de esa versión, solo las rutas `activo = true`. El gráfico, en cambio, usa siempre la **última versión cargada**, porque la tarifa rige desde su carga hasta que YPFB sube una nueva y no depende del mes que se esté mostrando. Si no hay ninguna versión, no se ofrecen tramos y el flete por defecto es 0.
 
 El preview muestra la versión anterior contra la que se calcula el diff y la fecha de vigencia propuesta (por defecto hoy, editable).
 
@@ -59,7 +59,7 @@ Alternativa considerada: ExcelJS. Se prefiere SheetJS por el manejo directo de e
 
 ### 4. Tramo manual por país, no por registro
 
-El gráfico replica el modelo: el usuario elige **un tramo por país de suministro** entre las rutas activas vigentes. Para DAP/DPU, el flete de todos los registros de ese país se recalcula como `tarifa_bob_m3 / tipo_cambio`; para FCA, o si el país no tiene tramo, se usa el flete de la proforma. La tabla muestra la tarifa y el TC usados.
+El gráfico replica el modelo: el usuario elige **un tramo por país de suministro** entre las rutas activas vigentes. Para DAP/DPU, el flete de todos los registros de ese país se recalcula como `tarifa_bob_m3 / tipo_cambio`; para FCA o para un país con tarifas sin tramo seleccionado, se usa el flete de la proforma; para un país sin tarifas, el flete por defecto es 0. La tabla muestra la tarifa y el TC usados.
 
 Se usa un **único tipo de cambio global**, por defecto el oficial del día (`tipo_cambio` más reciente), editable. El modelo lo maneja por país; se simplifica porque todas las tarifas están en Bs y el usuario pidió el TC del día. La selección de tramo y el TC se persisten en `localStorage` como en el modelo.
 
@@ -99,7 +99,7 @@ Se agrega `db/init/015_tarifas_flete_ypfb.sql`, idempotente, con la tabla y sus 
 - **Poca data de premio/flete (1 de 24 registros)** → el gráfico mostrará promedios basados en pocos registros y muchos “sin precio”. Mitigación: aviso explícito, vista de desglose y la carga de premio/flete sigue por la edición existente.
 - **Crecimiento por fotografía completa** → 180 filas por versión. Con cargas mensuales es marginal; los índices por `vigente_desde` mantienen las consultas rápidas. Si crece, se puede purgar historial antiguo.
 - **Un tramo por país** → en países con varias rutas, el flete calculado no distingue registro por registro. Es el comportamiento del modelo y se acepta; la alternativa sería un emparejamiento automático que hoy no es fiable.
-- **Sin tarifas cargadas** → el gráfico cae al flete de la proforma. Mitigación: la interfaz indica que no hay tarifas y la sección permite cargarlas.
+- **Sin tarifas cargadas** → el flete por defecto es 0. Mitigación: la interfaz indica que no hay tarifas y la sección permite cargarlas.
 - **La última tarifa se aplica a meses históricos** → la tarifa rige desde su carga hasta la siguiente, así que el análisis de meses anteriores usa la vigencia actual. Es la decisión del usuario; la nota indica desde cuándo rige.
 - **TC del día para meses históricos** → el TC no corresponde al mes mostrado. Es la decisión del usuario; se muestra el TC usado junto con la vigencia de la tarifa.
 - **Allowlist de lectura** → ampliar `lecturaPermitida` es sensible. Se limita a GET y los POST siguen exigiendo `admin`.
@@ -111,7 +111,7 @@ Se agrega `db/init/015_tarifas_flete_ypfb.sql`, idempotente, con la tabla y sus 
 2. Desplegar backend y frontend.
 3. Cargar el Excel desde la nueva sección, indicando la fecha de vigencia real de la tarifa.
 4. Verificar que el gráfico muestre los tramos y recalcule el flete.
-5. Rollback: revertir el código y eliminar la tabla; el gráfico vuelve al flete de la proforma.
+5. Rollback: revertir el código y eliminar la tabla; el gráfico vuelve a flete 0.
 
 ## Open Questions
 

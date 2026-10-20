@@ -1391,7 +1391,12 @@ function YpfbComparacion({ tab, options }) {
 
   const calcRows = filtradas.map((d) => {
     const ruta = esTarifa ? rutaDe(d.pais_procedencia) : null;
-    const flete = ruta && tcVal ? Number(ruta.tarifa_bob_m3) / tcVal : (d.flete != null ? Number(d.flete) : 0);
+    const tieneRutas = rutasPorPais.has(normPais(d.pais_procedencia));
+    const flete = ruta && tcVal
+      ? Number(ruta.tarifa_bob_m3) / tcVal
+      : tieneRutas
+        ? (d.flete != null ? Number(d.flete) : 0)
+        : 0;
     const premio = d.premio != null ? Number(d.premio) : 0;
     const precio = premio + flete;
     const volumen = d.volumen != null ? Number(d.volumen) : 0;
@@ -1487,14 +1492,14 @@ function YpfbComparacion({ tab, options }) {
     g.rutas.push(r);
   }
 
-  const nota = inc === 'FCA'
-    ? 'En FCA el flete es el de la proforma: el tramo y el tipo de cambio solo aplican a DAP y DPU.'
-    : !vigenteDesde
-      ? 'No hay tarifas flete vigentes para este mes; se usa el flete de la proforma.'
-      : suministro === 'todos'
-        ? 'Selecciona un país en «País de procedencia» para configurar su tramo. Los tramos ya elegidos se aplican por país.'
-        : !grupoSel
-          ? `${suministro} no tiene tramos de tarifa; se usa el flete de la proforma.`
+  const nota = !vigenteDesde
+    ? 'No hay tarifas flete vigentes; el flete por defecto es 0.'
+    : suministro === 'todos'
+      ? 'Selecciona un país en «País de procedencia» para configurar su tramo. Los tramos ya elegidos se aplican por país.'
+      : !grupoSel
+        ? `${suministro} no tiene tramos de tarifa; el flete por defecto es 0.`
+        : inc === 'FCA'
+          ? 'En FCA el flete es el de la proforma: el tramo y el tipo de cambio solo aplican a DAP y DPU.'
           : rutaActual && tcVal
             ? `Flete ${inc} desde ${suministro}: ${rutaActual.origen} → ${rutaActual.frontera} → ${rutaActual.destino} · ${fmt(rutaActual.tarifa_bob_m3, 2)} Bs/m³ ÷ ${fmt(tcVal, 2)} = ${fmt(rutaActual.tarifa_bob_m3 / tcVal, 2)} USD/m³`
             : `${suministro}: sin tramo elegido, se usa el flete de la proforma.`;

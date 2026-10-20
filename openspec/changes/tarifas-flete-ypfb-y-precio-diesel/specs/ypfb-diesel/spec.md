@@ -8,7 +8,7 @@ Además, el sistema SHALL:
 
 - permitir seleccionar, para cada país de suministro, un tramo de las tarifas flete YPFB activas y vigentes;
 - calcular el flete de los registros DAP y DPU como la tarifa del tramo en Bs/m³ dividida por el tipo de cambio, mostrando la tarifa y el tipo de cambio usados;
-- usar el flete de la proforma para los registros FCA y cuando no haya un tramo seleccionado para el país;
+- usar el flete de la proforma para los registros FCA de países con tarifas y cuando un país con tarifas no tenga un tramo seleccionado; usar 0 cuando el país no tenga tramos en las tarifas YPFB;
 - usar por defecto el tipo de cambio oficial del día y permitir editarlo;
 - ofrecer una vista **Precio unitario** y una vista **Premio y flete** que muestre, por proveedor y punto de suministro y en agregado, el producto, el premio y el flete, calculando el producto como precio unitario menos premio menos flete;
 - identificar los registros sin precio (precio nulo o cero), avisar su efecto en el promedio ponderado y permitir incluirlos o excluirlos del cálculo;
@@ -51,9 +51,13 @@ Además, el sistema SHALL:
 - **WHEN** el Incoterm es FCA
 - **THEN** el flete mostrado es el de la proforma y el tramo y el tipo de cambio no se aplican
 
-#### Scenario: País sin tramo seleccionado
-- **WHEN** un país no tiene un tramo seleccionado
+#### Scenario: País con tarifas sin tramo seleccionado
+- **WHEN** un país tiene tarifas YPFB pero no tiene un tramo seleccionado
 - **THEN** se usa el flete de la proforma para sus registros
+
+#### Scenario: País sin tarifas YPFB
+- **WHEN** un país de procedencia no tiene tramos en las tarifas YPFB
+- **THEN** el flete por defecto es 0 para sus registros
 
 #### Scenario: La última tarifa rige para todos los meses
 - **WHEN** se muestra un mes anterior o posterior a la fecha de la última versión cargada

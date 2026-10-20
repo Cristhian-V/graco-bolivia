@@ -41,3 +41,4 @@
 - [x] 7.1 Agrupar el selector por `Origen → Frontera` (subtítulo) y mostrar `Destino · Tarifa` en cada opción; usar País de procedencia como único filtro, omitir países sin registros y deshabilitar el tramo en países sin rutas; verificar Argentina (55 rutas, 12 grupos), Brasil omitido y Estados Unidos deshabilitado
 - [x] 7.2 Completar `nro_proforma` desde el CM-003 para los registros de YPFB sin proforma, con botón en Combustibles y ejecución en la corrida; verificar que el gráfico muestre los números
 - [x] 7.3 Calcular el Precio unitario como premio + flete en la tabla y en la vista Premio y flete; verificar con el registro 300444 (189 + 140 = 329.00)
+- [x] 7.4 Usar flete 0 por defecto para países de procedencia sin tarifas YPFB (por ejemplo Estados Unidos), manteniendo el flete de la proforma para países con tarifas sin tramo seleccionado
