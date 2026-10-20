@@ -444,3 +444,59 @@ tr.comb-expand td { background: #f8fafc; white-space: normal; padding: 14px; }
 @media (max-width: 768px) {
   .dash-half, .dash-third { grid-column: span 12; }
 }
+
+/* ============ Tarifas Flete YPFB ============ */
+.tarifas-filtros { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin: 12px 0 8px; }
+.tarifas-filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+.tarifas-filtros select { min-width: 150px; padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 12px; color: #374151; background: #fff; }
+.tarifas-filtros .btn { align-self: flex-end; }
+.tarifas-fecha { display: flex; flex-direction: column; gap: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+.tarifas-fecha input { padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 12px; }
+.tarifas-carga { margin: 12px 0 18px; padding: 14px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; }
+.tarifas-carga h3 { margin: 0 0 10px; font-size: 14px; }
+.tarifas-diff { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: #374151; }
+.tarifas-diff b { color: #111827; }
+.tarifas-errores { margin: 10px 0 0; padding-left: 18px; color: #b91c1c; font-size: 12px; }
+.tarifas-flete, .tarifas-resumen { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.tarifas-flete th, .tarifas-flete td,
+.tarifas-resumen th, .tarifas-resumen td { padding: 7px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+.tarifas-flete th, .tarifas-resumen th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; background: #f9fafb; }
+.tarifas-flete .num, .tarifas-resumen .num { text-align: right; }
+.tarifas-flete tr.inactiva td { color: #9ca3af; font-style: italic; }
+.tarifas-resumenes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.tarifas-resumenes h3 { margin: 0 0 8px; font-size: 13px; color: #374151; }
+@media (max-width: 900px) { .tarifas-resumenes { grid-template-columns: 1fr; } }
+
+/* ============ Diésel YPFB: tramo/TC, aviso y desglose ============ */
+.dash-ypfb-head { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; min-width: 0; }
+.dash-ypfb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; justify-content: flex-end; }
+.dash-ypfb-flete.na { opacity: .5; }
+.dash-ypfb-ruta { max-width: 340px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 11px; background: #fff; color: #374151; }
+.dash-ypfb-tc { width: 74px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 11px; color: #374151; background: #fff; font-variant-numeric: tabular-nums; }
+.dash-ypfb-note { margin: 0; font-size: 11px; color: #6b7280; text-align: right; }
+.dash-ypfb-notice { background: #fdf1d6; border: 1px solid #ebcb85; border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.5; color: #4b5563; margin: 10px 0; }
+.dash-ypfb-notice b { color: #8a5a00; }
+.dash-ypfb-pill { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 10px; margin-left: 8px; background: #e8edfd; color: #3358e0; }
+.dash-ypfb-pill.w { background: #fdf1d6; color: #8a5a00; border: 1px solid #ebcb85; }
+.dash-ypfb-sub { display: block; font-size: 10px; color: #9ca3af; font-weight: 400; }
+.dash-ypfb tr.sub.off td { opacity: .55; }
+.dash-ypfb-premio { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.dash-ypfb-mets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; }
+.dash-ypfb-met { display: flex; flex-direction: column; min-width: 0; }
+.dash-ypfb-met b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.dash-ypfb-met b small { font-size: 11px; font-weight: 500; color: #6b7280; margin-left: 4px; }
+.dash-ypfb-met span { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
+.dash-ypfb-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: #6b7280; }
+.dash-ypfb-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.dash-ypfb-legend i.b { background: #c9d0da; }
+.dash-ypfb-legend i.p { background: #3358e0; }
+.dash-ypfb-legend i.f { background: #e0902b; }
+.dash-ypfb-pc { border-top: 1px solid #e5e7eb; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.dash-ypfb-pc h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.dash-ypfb-pc h3 small { font-weight: 400; color: #6b7280; margin-left: 8px; font-size: 12px; }
+.dash-ypfb-comp { display: flex; height: 20px; border-radius: 4px; overflow: hidden; background: #f6f7f9; }
+.dash-ypfb-comp span { display: block; height: 100%; }
+.dash-ypfb-comp .b { background: #c9d0da; }
+.dash-ypfb-comp .p { background: #3358e0; }
+.dash-ypfb-comp .f { background: #e0902b; }
+.dash-ypfb-comp.empty { background: none; border: 1px dashed #d1d5db; color: #6b7280; font-size: 11px; align-items: center; padding-inline: 10px; }

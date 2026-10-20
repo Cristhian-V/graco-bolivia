@@ -306,6 +306,48 @@ export async function backfillManifiestos() {
   return { total: rows.length, copiados, sinManifiesto, errores };
 }
 
+function normalizarProforma(num) {
+  return String(num ?? '')
+    .replace(/^#\s*/, '')
+    .replace(/\s+YPFB\s*$/i, '')
+    .trim();
+}
+
+// Completa el nro_proforma de YPFB desde la factura comercial (CM-003)
+// cuando el registro todavía no tiene una proforma cargada.
+export async function backfillProformas() {
+  const { rows } = await pool.query(`
+    SELECT d.dim_dam,
+      (SELECT dd.num FROM documentos_despacho dd
+       WHERE dd.dim_dam = d.dim_dam AND dd.tipo = 'CM-003'
+         AND NULLIF(TRIM(dd.num), '') IS NOT NULL
+       ORDER BY dd.id LIMIT 1) AS num
+    FROM detalles d
+    WHERE d.importador_nit = '1020269020'
+      AND NOT EXISTS (SELECT 1 FROM ypfb_proformas y WHERE y.dim_dam = d.dim_dam)
+  `);
+  let copiados = 0;
+  let sinProforma = 0;
+  let errores = 0;
+  for (const r of rows) {
+    const num = normalizarProforma(r.num);
+    if (!num) { sinProforma += 1; continue; }
+    try {
+      const res = await pool.query(
+        `INSERT INTO ypfb_proformas (dim_dam, nro_proforma)
+         VALUES ($1, $2) ON CONFLICT (dim_dam) DO NOTHING`,
+        [r.dim_dam, num],
+      );
+      if (res.rowCount > 0) copiados += 1;
+      else sinProforma += 1;
+    } catch (e) {
+      errores += 1;
+      console.error(`[backfill-proformas] error ${r.dim_dam}: ${e.message}`);
+    }
+  }
+  return { total: rows.length, copiados, sinProforma, errores };
+}
+
 export async function runCombustibles({ runId, nits, desde, hasta }) {
   const stats = { total: 0, nuevos: 0, errores: 0, ignorados: 0 };
   if (!desde) desde = config.fechaDesde;
@@ -402,11 +444,18 @@ export async function executeCombustiblesRun({ nits, desde, hasta }) {
     } catch (e) {
       console.error('[combustibles] backfill de manifiestos falló:', e.message);
     }
+    let proformas = null;
+    try {
+      proformas = await backfillProformas();
+      console.log('[combustibles] proformas completadas:', proformas);
+    } catch (e) {
+      console.error('[combustibles] backfill de proformas falló:', e.message);
+    }
     await pool.query(
       `UPDATE ejecuciones SET estado='OK', finalizado_en=now(), total_prm=$1, prm_nuevos=$2, errores=$3 WHERE id=$4`,
       [stats.total, stats.nuevos, stats.errores, runId],
     );
-    return { runId, estado: 'OK', ...stats, manifiestos };
+    return { runId, estado: 'OK', ...stats, manifiestos, proformas };
   } catch (e) {
     await pool.query(
       `UPDATE ejecuciones SET estado='ERROR', finalizado_en=now(), mensaje=$1 WHERE id=$2`,

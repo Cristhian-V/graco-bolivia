@@ -42,7 +42,8 @@ function lecturaPermitida(method, p) {
     || p.startsWith('/manifiestos')
     || p.startsWith('/combustibles')
     || p.startsWith('/tipo-cambio')
-    || p.startsWith('/precio-marcador');
+    || p.startsWith('/precio-marcador')
+    || p.startsWith('/tarifas-flete-ypfb');
 }
 
 // Guardia general de /api:

@@ -58,6 +58,7 @@ export const ignorarTarifa = (id) => postJSON(`/combustibles/${id}/ignorar`, {})
 export const ejecutarManifiestos = () => postJSON('/ejecutar-manifiestos', {});
 export const ejecutarCombustibles = () => postJSON('/ejecutar-combustibles', {});
 export const backfillManifiestos = () => postJSON('/combustibles/manifiestos-backfill', {});
+export const backfillProformas = () => postJSON('/combustibles/proformas-backfill', {});
 export const getTipoCambio = () => getJSON('/tipo-cambio');
 export const actualizarTipoCambio = (desde, hasta) =>
   postJSON('/tipo-cambio/actualizar', { desde, hasta });
@@ -97,6 +98,19 @@ export const putMarcadores = (grafico, valores) => {
     return data;
   });
 };
+
+export const getTarifasFleteYpfb = (params = {}) => {
+  const qs = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v == null || v === '') return;
+    qs.set(k, v);
+  });
+  const s = qs.toString();
+  return getJSON(`/tarifas-flete-ypfb${s ? `?${s}` : ''}`);
+};
+export const previewTarifasFleteYpfb = (file) => postFile('/tarifas-flete-ypfb/preview', file);
+export const aplicarTarifasFleteYpfb = (vigente_desde, registros) =>
+  postJSON('/tarifas-flete-ypfb/aplicar', { vigente_desde, registros });
 
 export const getPrecioMarcador = () => getJSON('/precio-marcador');
 export const previewPrecioMarcador = (file) => postFile('/precio-marcador/preview', file);

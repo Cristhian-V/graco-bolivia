@@ -3,9 +3,10 @@ import {
   getClientes,
   getAduanas, postAduana, getManifiestos,
   getCombustibles, getDocumentos, putCombustible, ignorarTarifa,
-  ejecutarManifiestos, ejecutarCombustibles, backfillManifiestos,
+  ejecutarManifiestos, ejecutarCombustibles, backfillManifiestos, backfillProformas,
   getTipoCambio, actualizarTipoCambio, sincronizarTipoCambioCombustibles,
   getReferencias, postReferencia,
+  getTarifasFleteYpfb, previewTarifasFleteYpfb, aplicarTarifasFleteYpfb,
   getPrecioMarcador, previewPrecioMarcador, procesarPrecioMarcador, rellenarPrecioMarcador, aplicarPrecioMarcador,
   login, logout, getMe, getUsuarios, postUsuario, putUsuario,
 } from './api.js';
@@ -306,6 +307,20 @@ function CombustiblesSection({ canWrite }) {
     }
   }
 
+  async function completarProformas() {
+    setRunning(true);
+    setRunMsg(null);
+    try {
+      const r = await backfillProformas();
+      setRunMsg(`Proformas completadas: ${r.copiados} copiadas, ${r.sinProforma} sin CM-003, ${r.errores} errores.`);
+      setRefresh((n) => n + 1);
+    } catch (e) {
+      setRunMsg(`Error: ${e.message}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function toggleDocs(id) {
     setDocsId((cur) => (cur === id ? null : id));
   }
@@ -327,7 +342,10 @@ function CombustiblesSection({ canWrite }) {
       try {
         const docs = await getDocumentos(c.id);
         const fc = (docs || []).find((d) => d.tipo === 'CM-003');
-        if (fc && fc.num) setForm((f) => ({ ...f, nro_proforma: fc.num }));
+        if (fc && fc.num) {
+          const num = String(fc.num).replace(/^#\s*/, '').replace(/\s+YPFB\s*$/i, '').trim();
+          setForm((f) => ({ ...f, nro_proforma: num }));
+        }
       } catch {
         // sin factura comercial: se deja vacío
       }
@@ -373,6 +391,7 @@ function CombustiblesSection({ canWrite }) {
         {canWrite && <button className="btn" onClick={procesar} disabled={running}>{running ? 'Procesando…' : 'Procesar Combustibles'}</button>}
         {canWrite && <button className="btn" onClick={sincronizarTc} disabled={running}>Sincronizar T/C</button>}
         {canWrite && <button className="btn" onClick={completarManifiestos} disabled={running}>Completar manifiestos</button>}
+        {canWrite && <button className="btn" onClick={completarProformas} disabled={running}>Completar proformas</button>}
         <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
         <button className="btn" onClick={refrescarMes} disabled={running}>Refrescar</button>
         <a className="btn" href={`/api/combustibles/export${mes ? `?mes=${mes}` : ''}`}>Descargar Excel</a>
@@ -629,6 +648,7 @@ const SECTIONS = [
   { id: 'presentacion', label: 'Presentación', roles: ['admin', 'presentacion'] },
   { id: 'precio-marcador', label: 'Precio Marcador', roles: ['admin', 'presentacion'] },
   { id: 'tipo-cambio', label: 'Tipo de cambio', roles: ['admin', 'presentacion'] },
+  { id: 'tarifas-flete-ypfb', label: 'Tarifas Flete YPFB', roles: ['admin', 'presentacion'] },
   { id: 'referencias', label: 'Referencias', roles: ['admin'] },
   { id: 'usuarios', label: 'Usuarios', roles: ['admin'] },
 ];
@@ -797,6 +817,283 @@ function PrecioMarcadorSection({ canWrite }) {
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+const TARIFAS_FILTROS_VACIOS = {
+  pais: '', origen: '', frontera: '', destino: '', lote: '', estado: 'activos',
+};
+
+function hoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function nf(v, d = 2) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  return Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function TarifasFleteSection({ canWrite }) {
+  const [filtros, setFiltros] = useState(TARIFAS_FILTROS_VACIOS);
+  const [refresh, setRefresh] = useState(0);
+  const [preview, setPreview] = useState(null);
+  const [vigenteDesde, setVigenteDesde] = useState(hoyISO());
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const todo = useData(() => getTarifasFleteYpfb({ estado: 'todos' }), [refresh]);
+  const data = useData(() => getTarifasFleteYpfb(filtros), [filtros, refresh]);
+
+  const opciones = (todo.data && todo.data.tarifas) || [];
+  const filas = (data.data && data.data.tarifas) || [];
+  const resumenPais = (data.data && data.data.resumen_pais) || [];
+  const resumenFrontera = (data.data && data.data.resumen_frontera) || [];
+  const versiones = (data.data && data.data.versiones) || [];
+  const vigente = data.data && data.data.vigente_desde;
+
+  const uniq = (campo) => [...new Set(opciones.map((r) => r[campo]).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b)));
+
+  function set(k, v) {
+    setFiltros((prev) => {
+      const next = { ...prev, [k]: v };
+      if (k === 'pais') { next.origen = ''; next.frontera = ''; next.destino = ''; }
+      if (k === 'origen') { next.frontera = ''; next.destino = ''; }
+      if (k === 'frontera') { next.destino = ''; }
+      return next;
+    });
+  }
+
+  async function leer(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    setPreview(null);
+    try {
+      setPreview(await previewTarifasFleteYpfb(file));
+      setVigenteDesde(hoyISO());
+    } catch (ex) {
+      setErr(ex.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function aplicar() {
+    if (!preview) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await aplicarTarifasFleteYpfb(vigenteDesde, preview.registros);
+      setMsg(`Vigencia ${r.vigente_desde} aplicada: ${r.activos} rutas activas y ${r.inactivos} inactivas.`);
+      setPreview(null);
+      setRefresh((n) => n + 1);
+    } catch (ex) {
+      setErr(ex.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Tarifas Flete YPFB</h2>
+      {msg && <p className="ok">{msg}</p>}
+      {err && <p className="error">{err}</p>}
+
+      <div className="tarifas-filtros">
+        <label>País
+          <select value={filtros.pais} onChange={(e) => set('pais', e.target.value)}>
+            <option value="">Todos</option>
+            {uniq('pais_origen').map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label>Origen
+          <select value={filtros.origen} onChange={(e) => set('origen', e.target.value)}>
+            <option value="">Todos</option>
+            {uniq('origen').map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label>Frontera
+          <select value={filtros.frontera} onChange={(e) => set('frontera', e.target.value)}>
+            <option value="">Todas</option>
+            {uniq('frontera').map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label>Destino
+          <select value={filtros.destino} onChange={(e) => set('destino', e.target.value)}>
+            <option value="">Todos</option>
+            {uniq('destino').map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label>Lote
+          <select value={filtros.lote} onChange={(e) => set('lote', e.target.value)}>
+            <option value="">Todos</option>
+            {uniq('lote').map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label>Estado
+          <select value={filtros.estado} onChange={(e) => set('estado', e.target.value)}>
+            <option value="activos">Activas</option>
+            <option value="inactivos">Inactivas</option>
+            <option value="todos">Todas</option>
+          </select>
+        </label>
+        <button className="btn" type="button" onClick={() => setFiltros(TARIFAS_FILTROS_VACIOS)}>Limpiar</button>
+      </div>
+
+      <p className="dash-sub">
+        Vigencia consultada: {vigente || 'sin tarifas cargadas'}
+        {versiones.length > 0 && ` · ${versiones.length} versión${versiones.length === 1 ? '' : 'es'}`}
+      </p>
+
+      {canWrite && (
+        <div className="tarifas-carga">
+          <h3>Cargar tarifas</h3>
+          <div className="toolbar">
+            <input type="file" accept=".xlsx,.xls" onChange={leer} disabled={busy} />
+            <label className="tarifas-fecha">
+              Vigente desde
+              <input type="date" value={vigenteDesde} onChange={(e) => setVigenteDesde(e.target.value)} />
+            </label>
+            {busy && <span className="run-msg">Procesando…</span>}
+          </div>
+          {!preview && (
+            <p className="empty">Sube el Excel con la hoja &quot;Consolidado&quot;. Primero se muestra el resumen de cambios; luego puedes aplicarlo.</p>
+          )}
+          {preview && (
+            <div>
+              <div className="tarifas-diff">
+                <span>Nuevas: <b>{preview.nuevas}</b></span>
+                <span>Actualizadas: <b>{preview.actualizadas}</b></span>
+                <span>Sin cambio: <b>{preview.sin_cambio}</b></span>
+                <span>A desactivar: <b>{preview.a_desactivar}</b></span>
+                <span>Errores: <b>{preview.errores.length}</b></span>
+              </div>
+              {preview.errores.length > 0 && (
+                <ul className="tarifas-errores">
+                  {preview.errores.slice(0, 8).map((er, i) => (
+                    <li key={i}>Fila {er.fila}: {er.motivo}</li>
+                  ))}
+                  {preview.errores.length > 8 && <li>… {preview.errores.length - 8} más</li>}
+                </ul>
+              )}
+              <div className="toolbar" style={{ marginTop: 12 }}>
+                <button className="btn" type="button" onClick={aplicar} disabled={busy || !vigenteDesde}>
+                  Aplicar vigencia
+                </button>
+                <button className="link" type="button" onClick={() => setPreview(null)}>Descartar</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(data.loading || todo.loading) && <p className="empty">Cargando…</p>}
+      {data.error && <p className="error">{data.error}</p>}
+      {!data.loading && filas.length === 0 && (
+        <p className="empty">No hay rutas para los filtros seleccionados.</p>
+      )}
+      {filas.length > 0 && (
+        <>
+          <div className="table-scroll">
+            <table className="tarifas-flete">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Lote</th>
+                  <th>N° en documento</th>
+                  <th>País de origen</th>
+                  <th>Origen</th>
+                  <th>Frontera</th>
+                  <th>Municipio frontera</th>
+                  <th>Destino</th>
+                  <th>Municipio destino</th>
+                  <th>Tarifa fija (Bs/m3)</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((r) => (
+                  <tr key={r.id} className={r.activo ? '' : 'inactiva'}>
+                    <td>{r.id_excel == null ? '—' : r.id_excel}</td>
+                    <td>{r.lote || '—'}</td>
+                    <td>{r.nro_documento == null ? '—' : r.nro_documento}</td>
+                    <td>{r.pais_origen}</td>
+                    <td>{r.origen}</td>
+                    <td>{r.frontera || '—'}</td>
+                    <td>{r.municipio_frontera || '—'}</td>
+                    <td>{r.destino}</td>
+                    <td>{r.municipio_destino || '—'}</td>
+                    <td className="num">{nf(r.tarifa_bob_m3)}</td>
+                    <td>{r.activo ? 'Activa' : 'Inactiva'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="tarifas-resumenes">
+            <div>
+              <h3>Resumen por país</h3>
+              <div className="table-scroll">
+                <table className="tarifas-resumen">
+                  <thead>
+                    <tr>
+                      <th>País</th><th>N° tramos</th><th>Tarifa mín.</th>
+                      <th>Tarifa máx.</th><th>Tarifa promedio</th><th>Orígenes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumenPais.map((r) => (
+                      <tr key={r.pais_origen}>
+                        <td>{r.pais_origen}</td>
+                        <td className="num">{r.tramos}</td>
+                        <td className="num">{nf(r.tarifa_min)}</td>
+                        <td className="num">{nf(r.tarifa_max)}</td>
+                        <td className="num">{nf(r.tarifa_promedio)}</td>
+                        <td>{r.origenes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h3>Por país y frontera</h3>
+              <div className="table-scroll">
+                <table className="tarifas-resumen">
+                  <thead>
+                    <tr>
+                      <th>País</th><th>Origen</th><th>Frontera</th>
+                      <th>N° tramos</th><th>Tarifa mín.</th><th>Tarifa máx.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumenFrontera.map((r) => (
+                      <tr key={`${r.pais_origen}|${r.origen}|${r.frontera}`}>
+                        <td>{r.pais_origen}</td>
+                        <td>{r.origen}</td>
+                        <td>{r.frontera || '—'}</td>
+                        <td className="num">{r.tramos}</td>
+                        <td className="num">{nf(r.tarifa_min)}</td>
+                        <td className="num">{nf(r.tarifa_max)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -1012,6 +1309,7 @@ export default function App() {
         {section === 'presentacion' && <DashboardSection canWrite={canWrite} />}
         {section === 'precio-marcador' && <PrecioMarcadorSection canWrite={canWrite} />}
         {section === 'tipo-cambio' && <TipoCambioSection canWrite={canWrite} />}
+        {section === 'tarifas-flete-ypfb' && <TarifasFleteSection canWrite={canWrite} />}
         {section === 'referencias' && <ReferenciasSection />}
         {section === 'usuarios' && <UsuariosSection />}
       </main>

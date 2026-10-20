@@ -1294,15 +1294,60 @@ function mostrarProveedor(nombre) {
   return String(nombre).replace(/\s+/g, ' ').trim();
 }
 
+const YPFB_LS_KEY = 'ypfbComparacion';
+
+function normPais(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
+function leerYpfbLS() {
+  try {
+    const raw = localStorage.getItem(YPFB_LS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function guardarYpfbLS(v) {
+  try {
+    localStorage.setItem(YPFB_LS_KEY, JSON.stringify(v));
+  } catch {
+    // localStorage puede no estar disponible
+  }
+}
+
 function YpfbComparacion({ tab, options }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [filtro, setFiltro] = useState(defaultFiltro);
   const [open, setOpen] = useState(false);
   const [incoterm, setIncoterm] = useState('');
   const [suministro, setSuministro] = useState('todos');
+  const [rutaSel, setRutaSel] = useState(() => leerYpfbLS().ruta || {});
+  const [tc, setTc] = useState(() => {
+    const v = Number(leerYpfbLS().tc);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  });
+  const [vista, setVista] = useState('precio');
+  const [excluir, setExcluir] = useState(false);
   const { data, loading, error } = useDashboardData(tab, filtro, filters, { chart: 'diesel-ypfb' });
 
-  const rows = data && data.diesel_ypfb ? data.diesel_ypfb : [];
+  useEffect(() => {
+    guardarYpfbLS({ ruta: rutaSel, tc });
+  }, [rutaSel, tc]);
+
+  const rows = (data && data.diesel_ypfb) || [];
+  const tarifas = (data && data.tarifas) || [];
+  const tcOficial = (data && data.tc) || null;
+  const vigenteDesde = (data && data.vigente_desde) || null;
+
+  useEffect(() => {
+    const v = Number(tcOficial && tcOficial.valor);
+    if (tc == null && Number.isFinite(v) && v > 0) setTc(v);
+  }, [tcOficial, tc]);
+
   const incoterms = [...new Set(rows.map((r) => r.incoterm).filter(Boolean))].sort();
   const suministros = [...new Set(rows.map((r) => r.pais_procedencia).filter(Boolean))].sort();
   const inc = incoterm && incoterms.includes(incoterm) ? incoterm : (incoterms[0] || '');
@@ -1317,59 +1362,215 @@ function YpfbComparacion({ tab, options }) {
     return true;
   });
 
+  const rutasPorPais = new Map();
+  for (const r of tarifas) {
+    const k = normPais(r.pais_origen);
+    if (!rutasPorPais.has(k)) rutasPorPais.set(k, { pais: r.pais_origen, rutas: [] });
+    rutasPorPais.get(k).rutas.push(r);
+  }
+  function rutaDe(pais) {
+    const grupo = rutasPorPais.get(normPais(pais));
+    if (!grupo) return null;
+    const id = rutaSel[normPais(pais)];
+    if (id == null) return null;
+    return grupo.rutas.find((r) => String(r.id) === String(id)) || null;
+  }
+
+  function setRuta(pais, id) {
+    const k = normPais(pais);
+    setRutaSel((prev) => {
+      const next = { ...prev };
+      if (id === '') delete next[k];
+      else next[k] = Number(id);
+      return next;
+    });
+  }
+
+  const tcVal = Number(tc) > 0 ? Number(tc) : (Number(tcOficial && tcOficial.valor) > 0 ? Number(tcOficial.valor) : null);
+  const esTarifa = inc === 'DAP' || inc === 'DPU';
+
+  const calcRows = filtradas.map((d) => {
+    const ruta = esTarifa ? rutaDe(d.pais_procedencia) : null;
+    const flete = ruta && tcVal ? Number(ruta.tarifa_bob_m3) / tcVal : (d.flete != null ? Number(d.flete) : 0);
+    const premio = d.premio != null ? Number(d.premio) : 0;
+    const precio = premio + flete;
+    const volumen = d.volumen != null ? Number(d.volumen) : 0;
+    return {
+      ...d, ruta, flete, precio, premio, volumen,
+      sinPrecio: precio <= 0,
+    };
+  });
+  const incluidas = calcRows.filter((d) => !(excluir && d.sinPrecio));
+
   const acc = () => ({ vol: 0, premio: 0, flete: 0, precio: 0, pfs: [] });
   const add = (a, d) => {
     const v = d.volumen || 0;
     a.vol += v;
     a.premio += (d.premio || 0) * v;
     a.flete += (d.flete || 0) * v;
-    a.precio += (d.precio_unitario || 0) * v;
+    a.precio += (d.sinPrecio ? 0 : d.precio) * v;
     a.pfs.push(d);
   };
-  const prom = (a) => (a.vol ? { vol: a.vol, premio: a.premio / a.vol, flete: a.flete / a.vol, precio: a.precio / a.vol } : null);
+  const prom = (a) => (a.vol ? {
+    vol: a.vol,
+    premio: a.premio / a.vol,
+    flete: a.flete / a.vol,
+    precio: a.precio / a.vol,
+  } : null);
 
   const porProv = new Map();
-  const total = acc();
-  filtradas.forEach((d) => {
+  for (const d of calcRows) {
     const clave = claveProveedor(d.proveedor);
-    if (!porProv.has(clave)) porProv.set(clave, { prov: mostrarProveedor(d.proveedor), a: acc(), sum: new Map() });
+    if (!porProv.has(clave)) porProv.set(clave, { prov: mostrarProveedor(d.proveedor), a: acc(), puntos: [], paises: new Map() });
     const t = porProv.get(clave);
+    t.puntos.push(d);
     const pais = d.pais_procedencia || 'Sin país';
-    if (!t.sum.has(pais)) t.sum.set(pais, { pais, a: acc() });
+    if (!t.paises.has(pais)) t.paises.set(pais, { pais, a: acc(), total: 0, sinPrecio: 0, puntos: [] });
+    const s = t.paises.get(pais);
+    s.puntos.push(d);
+    s.total += 1;
+    if (d.sinPrecio) s.sinPrecio += 1;
+    if (excluir && d.sinPrecio) continue;
     add(t.a, d);
-    add(t.sum.get(pais).a, d);
-    add(total, d);
-  });
+    add(s.a, d);
+  }
+
   const out = [...porProv.values()].map((t) => ({
     prov: t.prov,
     p: prom(t.a),
-    pfs: t.a.pfs,
-    subs: [...t.sum.values()].map((s) => ({ pais: s.pais, p: prom(s.a), pfs: s.a.pfs })).filter((s) => s.p),
-  })).filter((r) => r.p).sort((a, b) => a.p.precio - b.p.precio);
+    puntos: t.puntos,
+    subs: [...t.paises.values()].map((s) => ({
+      pais: s.pais,
+      p: prom(s.a),
+      total: s.total,
+      sinPrecio: s.sinPrecio,
+      puntos: s.puntos,
+    })),
+  })).sort((a, b) => {
+    const pa = a.p ? a.p.precio : Infinity;
+    const pb = b.p ? b.p.precio : Infinity;
+    return pa - pb;
+  });
+
+  const total = acc();
+  incluidas.forEach((d) => add(total, d));
   const mercado = prom(total);
 
-  const pfsTxt = (pfs) => pfs.map((d) => d.nro_proforma).filter(Boolean).join(' · ') || '–';
-  const celdas = (p, key) => [
-    <td key={`v${key}`} className="sep">{fmt(p.vol, 0)}</td>,
-    <td key={`p${key}`}>{fmt(p.premio, 2)}</td>,
-    <td key={`f${key}`}>{fmt(p.flete, 2)}</td>,
+  const pfsTxt = (pts) => [...new Set(pts.map((d) => d.nro_proforma).filter(Boolean))].join(' · ') || '–';
+  const pfCount = (pts) => new Set(pts.map((d) => d.nro_proforma).filter(Boolean)).size;
+
+  const celdas = (p, key, ruta) => [
+    <td key={`v${key}`} className="sep">{p ? fmt(p.vol, 0) : '—'}</td>,
+    <td key={`p${key}`}>{p ? fmt(p.premio, 2) : '—'}</td>,
+    <td key={`f${key}`}>
+      {p ? fmt(p.flete, 2) : '—'}
+      {p && ruta && tcVal ? <span className="dash-ypfb-sub">{fmt(ruta.tarifa_bob_m3, 2)} Bs ÷ {fmt(tcVal, 2)}</span> : null}
+    </td>,
+    <td key={`u${key}`} className="precio">{p ? fmt(p.precio, 2) : '—'}</td>,
   ];
 
+  const sinPrecioRows = calcRows.filter((d) => d.sinPrecio);
+  const wavgPrecio = (arr) => {
+    const vol = arr.reduce((a, d) => a + d.volumen, 0);
+    return vol ? arr.reduce((a, d) => a + (d.sinPrecio ? 0 : d.precio) * d.volumen, 0) / vol : null;
+  };
+  const conTodos = wavgPrecio(calcRows);
+  const sinEllos = wavgPrecio(calcRows.filter((d) => !d.sinPrecio));
+
+  const grupoSel = suministro !== 'todos' ? rutasPorPais.get(normPais(suministro)) : null;
+  const rutaActual = grupoSel ? rutaDe(suministro) : null;
+  const gruposRuta = [];
+  for (const r of (grupoSel ? grupoSel.rutas : [])) {
+    const nombre = `${r.origen} → ${r.frontera}`;
+    let g = gruposRuta.find((x) => x.nombre === nombre);
+    if (!g) { g = { nombre, rutas: [] }; gruposRuta.push(g); }
+    g.rutas.push(r);
+  }
+
+  const nota = inc === 'FCA'
+    ? 'En FCA el flete es el de la proforma: el tramo y el tipo de cambio solo aplican a DAP y DPU.'
+    : !vigenteDesde
+      ? 'No hay tarifas flete vigentes para este mes; se usa el flete de la proforma.'
+      : suministro === 'todos'
+        ? 'Selecciona un país en «País de procedencia» para configurar su tramo. Los tramos ya elegidos se aplican por país.'
+        : !grupoSel
+          ? `${suministro} no tiene tramos de tarifa; se usa el flete de la proforma.`
+          : rutaActual && tcVal
+            ? `Flete ${inc} desde ${suministro}: ${rutaActual.origen} → ${rutaActual.frontera} → ${rutaActual.destino} · ${fmt(rutaActual.tarifa_bob_m3, 2)} Bs/m³ ÷ ${fmt(tcVal, 2)} = ${fmt(rutaActual.tarifa_bob_m3 / tcVal, 2)} USD/m³`
+            : `${suministro}: sin tramo elegido, se usa el flete de la proforma.`;
+  const versionTxt = vigenteDesde ? ` · Tarifas vigentes desde ${vigenteDesde}` : '';
+
+  const totP = incluidas.reduce((a, d) => a + d.premio * d.volumen, 0);
+  const totF = incluidas.reduce((a, d) => a + d.flete * d.volumen, 0);
+
   const header = (
-    <div className="dash-frec-head">
-      <span className="dash-markers-label">Incoterm</span>
-      <div className="dash-seg">
-        {incoterms.map((i) => (
-          <button key={i} type="button" className={inc === i ? 'on' : ''} onClick={() => setIncoterm(i)}>{i}</button>
-        ))}
+    <div className="dash-ypfb-head">
+      <div className="dash-ypfb-row">
+        <span className="dash-markers-label">Incoterm</span>
+        <div className="dash-seg">
+          {incoterms.map((i) => (
+            <button key={i} type="button" className={inc === i ? 'on' : ''} onClick={() => setIncoterm(i)}>{i}</button>
+          ))}
+        </div>
+        <span className="dash-markers-label">País de procedencia</span>
+        <div className="dash-seg">
+          <button type="button" className={suministro === 'todos' ? 'on' : ''} onClick={() => setSuministro('todos')}>Todos</button>
+          {suministros.map((s) => (
+            <button key={s} type="button" className={suministro === s ? 'on' : ''} onClick={() => setSuministro(s)}>{sl(s, 14)}</button>
+          ))}
+        </div>
       </div>
-      <span className="dash-markers-label">Suministro</span>
-      <div className="dash-seg">
-        <button type="button" className={suministro === 'todos' ? 'on' : ''} onClick={() => setSuministro('todos')}>Todos</button>
-        {suministros.map((s) => (
-          <button key={s} type="button" className={suministro === s ? 'on' : ''} onClick={() => setSuministro(s)}>{sl(s, 14)}</button>
-        ))}
+
+      <div className={`dash-ypfb-row dash-ypfb-flete${inc === 'FCA' ? ' na' : ''}`}>
+        <span className="dash-markers-label">Tramo</span>
+        <select
+          className="dash-ypfb-ruta"
+          value={rutaActual ? String(rutaActual.id) : ''}
+          onChange={(e) => setRuta(suministro, e.target.value)}
+          disabled={!grupoSel}
+          aria-label="Tramo de flete"
+        >
+          <option value="">
+            {suministro === 'todos'
+              ? 'Selecciona un país en «País de procedencia»'
+              : !grupoSel
+                ? 'Sin tramos para este país'
+                : 'Sin tramo: flete de la proforma'}
+          </option>
+          {gruposRuta.map((g) => (
+            <optgroup key={g.nombre} label={g.nombre}>
+              {g.rutas.map((r) => (
+                <option key={r.id} value={String(r.id)}>→ {r.destino} · {fmt(r.tarifa_bob_m3, 2)} Bs/m³</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <span className="dash-markers-label">Tipo de cambio</span>
+        <input
+          className="dash-ypfb-tc"
+          type="number"
+          step="0.01"
+          min="0.01"
+          inputMode="decimal"
+          value={tc == null ? '' : tc}
+          onChange={(e) => setTc(e.target.value === '' ? null : Number(e.target.value))}
+          aria-label="Tipo de cambio Bs por USD"
+        />
       </div>
+
+      <div className="dash-ypfb-row">
+        <span className="dash-markers-label">Vista</span>
+        <div className="dash-seg">
+          <button type="button" className={vista === 'precio' ? 'on' : ''} onClick={() => setVista('precio')}>Precio unitario</button>
+          <button type="button" className={vista === 'premio' ? 'on' : ''} onClick={() => setVista('premio')}>Premio y flete</button>
+        </div>
+        <span className="dash-markers-label">Registros sin precio</span>
+        <div className="dash-seg">
+          <button type="button" className={!excluir ? 'on' : ''} onClick={() => setExcluir(false)}>Incluir</button>
+          <button type="button" className={excluir ? 'on' : ''} onClick={() => setExcluir(true)}>Excluir</button>
+        </div>
+      </div>
+      <p className="dash-ypfb-note">{nota}{versionTxt}</p>
     </div>
   );
 
@@ -1391,7 +1592,26 @@ function YpfbComparacion({ tab, options }) {
       {!loading && !error && out.length === 0 && (
         <p className="empty">Sin entregas {inc || ''} en {MES_ABBR[mesAct - 1]} {filtro.anio}.</p>
       )}
-      {out.length > 0 && (
+      {sinPrecioRows.length > 0 && (
+        <div className="dash-ypfb-notice">
+          {excluir ? (
+            <>
+              <b>{sinPrecioRows.length} registro{sinPrecioRows.length === 1 ? '' : 's'} sin precio excluido{sinPrecioRows.length === 1 ? '' : 's'}</b>
+              {' '}({sinPrecioRows.map((d) => `${d.pais_procedencia || 'Sin país'}, ${fmt(d.volumen, 0)} m³`).join('; ')}).
+              {' '}Con {sinPrecioRows.length === 1 ? 'él' : 'ellos'} el promedio sería {fmt(conTodos, 2)} USD/m³.
+            </>
+          ) : (
+            <>
+              <b>{sinPrecioRows.length} registro{sinPrecioRows.length === 1 ? '' : 's'} sin precio</b>
+              {' '}({sinPrecioRows.map((d) => `${d.pais_procedencia || 'Sin país'}, ${fmt(d.volumen, 0)} m³`).join('; ')})
+              {' '}{sinPrecioRows.length === 1 ? 'entra' : 'entran'} al promedio y lo bajan de {fmt(sinEllos, 2)} a {fmt(conTodos, 2)} USD/m³.
+              {' '}En «Registros sin precio» puedes excluirlos.
+            </>
+          )}
+        </div>
+      )}
+
+      {vista === 'precio' && out.length > 0 && (
         <div className="table-scroll">
           <table className="dash-ypfb">
             <thead>
@@ -1401,27 +1621,38 @@ function YpfbComparacion({ tab, options }) {
                 <th className="sep">Volumen (m³)</th>
                 <th>Premio (USD/m³)</th>
                 <th>Flete (USD/m³)</th>
+                <th className="precio">Precio unitario {inc} (USD/m³)</th>
               </tr>
             </thead>
             <tbody>
               {out.map((r) => (
                 <Fragment key={r.prov}>
                   <tr className="prov">
-                    <td>{r.prov}</td>
+                    <td>
+                      {r.prov}
+                      {!r.p && <span className="dash-ypfb-pill w">Sin precio</span>}
+                    </td>
                     <td className="left na">
                       {suministro === 'todos'
-                        ? `${r.subs.length} punto${r.subs.length === 1 ? '' : 's'} · ${r.pfs.length} proforma${r.pfs.length === 1 ? '' : 's'}`
-                        : pfsTxt(r.pfs)}
+                        ? `${r.puntos.length} punto${r.puntos.length === 1 ? '' : 's'} · ${pfCount(r.puntos)} proforma${pfCount(r.puntos) === 1 ? '' : 's'}`
+                        : pfsTxt(r.puntos)}
                     </td>
                     {celdas(r.p, `p${r.prov}`)}
                   </tr>
-                  {suministro === 'todos' && r.subs.map((s) => (
-                    <tr className="sub" key={s.pais}>
-                      <td><span className="rama">└</span>{s.pais}</td>
-                      <td className="left pfs">{pfsTxt(s.pfs)}</td>
-                      {celdas(s.p, `s${r.prov}${s.pais}`)}
-                    </tr>
-                  ))}
+                  {suministro === 'todos' && r.subs.map((s) => {
+                    const ruta = esTarifa ? rutaDe(s.pais) : null;
+                    return (
+                      <tr className={`sub${!s.p ? ' off' : ''}`} key={s.pais}>
+                        <td>
+                          <span className="rama">└</span>{s.pais}
+                          {ruta ? <span className="dash-ypfb-pill">{ruta.frontera}</span> : null}
+                          {s.sinPrecio > 0 ? <span className="dash-ypfb-pill w">{s.sinPrecio} sin precio</span> : null}
+                        </td>
+                        <td className="left pfs">{pfsTxt(s.puntos)}</td>
+                        {celdas(s.p, `s${r.prov}${s.pais}`, ruta)}
+                      </tr>
+                    );
+                  })}
                 </Fragment>
               ))}
             </tbody>
@@ -1435,6 +1666,66 @@ function YpfbComparacion({ tab, options }) {
               </tfoot>
             )}
           </table>
+        </div>
+      )}
+
+      {vista === 'premio' && out.length > 0 && (
+        <div className="dash-ypfb-premio">
+          {mercado ? (
+            <div className="dash-ypfb-mets">
+              <div className="dash-ypfb-met"><b>{fmt(mercado.premio, 2)}<small>USD/m³</small></b><span>premio promedio</span></div>
+              <div className="dash-ypfb-met"><b>{fmt(totP, 0)}<small>USD</small></b><span>costo total en premio</span></div>
+              <div className="dash-ypfb-met"><b>{fmt(mercado.flete, 2)}<small>USD/m³</small></b><span>flete promedio</span></div>
+              <div className="dash-ypfb-met"><b>{fmt(totF, 0)}<small>USD</small></b><span>costo total en flete</span></div>
+            </div>
+          ) : (
+            <p className="empty">Sin registros con precio para el desglose.</p>
+          )}
+          <div className="dash-ypfb-legend">
+            <span><i className="b" />Producto</span>
+            <span><i className="p" />Premio</span>
+            <span><i className="f" />Flete</span>
+          </div>
+          {out.map((r) => r.subs.map((s) => {
+            const ruta = esTarifa ? rutaDe(s.pais) : null;
+            const p = s.p;
+            const base = p && p.precio > 0 ? p.precio - p.premio - p.flete : null;
+            const ancho = (x) => Math.max(0, Math.min(100, (x / p.precio) * 100));
+            return (
+              <div className="dash-ypfb-pc" key={`${r.prov}|${s.pais}`}>
+                <h3>
+                  {r.prov}
+                  <small>
+                    {s.pais}{ruta ? ` · ${ruta.frontera}` : ''}{ruta ? ` → ${ruta.destino}` : ''}
+                    {p ? ` · ${fmt(p.vol, 0)} m³` : ''}
+                    {s.sinPrecio > 0 ? ` · ${s.sinPrecio} sin precio` : ''}
+                  </small>
+                </h3>
+                {base == null ? (
+                  <div className="dash-ypfb-comp empty">Sin precio registrado: no se puede calcular el desglose.</div>
+                ) : (
+                  <>
+                    <div
+                      className="dash-ypfb-comp"
+                      role="img"
+                      aria-label={`Producto ${((base / p.precio) * 100).toFixed(1)}%, premio ${((p.premio / p.precio) * 100).toFixed(1)}%, flete ${((p.flete / p.precio) * 100).toFixed(1)}%`}
+                    >
+                      <span className="b" style={{ width: `${ancho(base)}%` }} />
+                      <span className="p" style={{ width: `${ancho(p.premio)}%` }} />
+                      <span className="f" style={{ width: `${ancho(p.flete)}%` }} />
+                    </div>
+                    <div className="dash-ypfb-mets">
+                      <div className="dash-ypfb-met"><b>{fmt(base, 2)}<small>{((base / p.precio) * 100).toFixed(1)}%</small></b><span>producto USD/m³</span></div>
+                      <div className="dash-ypfb-met"><b>{fmt(p.premio, 2)}<small>{((p.premio / p.precio) * 100).toFixed(1)}%</small></b><span>premio USD/m³</span></div>
+                      <div className="dash-ypfb-met"><b>{fmt(p.flete, 2)}<small>{((p.flete / p.precio) * 100).toFixed(1)}%</small></b><span>flete USD/m³</span></div>
+                      <div className="dash-ypfb-met"><b>{fmt(p.precio, 2)}<small>100%</small></b><span>precio unitario {inc}</span></div>
+                      <div className="dash-ypfb-met"><b>{fmt(p.premio * p.vol, 0)}<small>USD</small></b><span>premio × volumen</span></div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          }))}
         </div>
       )}
     </CardFrame>

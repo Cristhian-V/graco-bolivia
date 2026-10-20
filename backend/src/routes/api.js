@@ -4,8 +4,10 @@ import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { pool } from '../db.js';
 import { executeManifiestosRun } from '../services/manifiestosService.js';
-import { executeCombustiblesRun, backfillManifiestos } from '../services/combustiblesService.js';
+import { executeCombustiblesRun, backfillManifiestos, backfillProformas } from '../services/combustiblesService.js';
 import { getDashboardFilters, getDashboardKpis, getDashboardData, seedDetallesDesdeExcel, upsertDetalle, getMarcadores, setMarcadores } from '../services/presentacionService.js';
+import { previsualizarTarifas, aplicarTarifas, getTarifas } from '../services/tarifasFleteService.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { actualizarTipoCambioRango, sincronizarTipoCambioCombustibles } from '../services/tipoCambioService.js';
 import {
   leerPrecioMarcador,
@@ -535,6 +537,14 @@ router.post('/combustibles/manifiestos-backfill', async (req, res, next) => {
   }
 });
 
+router.post('/combustibles/proformas-backfill', async (req, res, next) => {
+  try {
+    res.json(await backfillProformas());
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/combustibles/export', async (req, res, next) => {
   try {
     const mes = req.query.mes; // opcional: YYYY-MM, aplica solo a "detalles"
@@ -764,6 +774,44 @@ router.post('/precio-marcador/aplicar', async (req, res, next) => {
     res.json(await aplicarPrecioMarcador());
   } catch (e) {
     next(e);
+  }
+});
+
+// ==================== TARIFAS FLETE YPFB ====================
+
+router.get('/tarifas-flete-ypfb', async (req, res, next) => {
+  try {
+    res.json(await getTarifas(req.query));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  '/tarifas-flete-ypfb/preview',
+  requireAdmin,
+  express.raw({
+    type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'],
+    limit: '50mb',
+  }),
+  async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: 'Se espera un archivo .xlsx en el cuerpo de la petición' });
+      }
+      res.json(await previsualizarTarifas(req.body));
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  },
+);
+
+router.post('/tarifas-flete-ypfb/aplicar', requireAdmin, async (req, res) => {
+  try {
+    const { vigente_desde, registros } = req.body || {};
+    res.json(await aplicarTarifas({ vigente_desde, registros }));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 });
 

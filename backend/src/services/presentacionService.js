@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { createHash } from 'node:crypto';
 import { pool } from '../db.js';
+import { getTarifasActuales, getTipoCambioHoy } from './tarifasFleteService.js';
 
 // Columnas de negocio de la tabla detalles (espejo de combustibles).
 export const COLUMNAS_DETALLES = [
@@ -418,24 +419,24 @@ export async function getVolumenFrontera(query) {
 // ==================== DIÉSEL YPFB (comparación por proveedor) ====================
 
 export async function getDieselYpfb(query) {
-  const anio = parseInt(query.anio, 10);
-  const conditions = ["d.importador_nit = '1020269020'", "d.producto = 'DIESEL'"];
-  const values = [];
-  let i = 1;
-  if (Number.isInteger(anio)) {
-    conditions.push(`EXTRACT(YEAR FROM d.fecha)::int = $${i}`);
-    values.push(anio);
-    i += 1;
-  }
-  const { rows } = await pool.query(`
-    SELECT d.dim_dam, d.proveedor, d.pais_procedencia, d.incoterm, d.fecha,
-      d.cantidad_m3 AS volumen,
-      y.nro_proforma, y.premio, y.flete, y.precio_unitario
-    FROM detalles d
-    LEFT JOIN ypfb_proformas y ON y.dim_dam = d.dim_dam
-    WHERE ${conditions.join(' AND ')}
-    ORDER BY d.proveedor, d.pais_procedencia, d.fecha
-  `, values);
+  const base = buildWhere({ ...query, producto: 'DIESEL' });
+  const conditions = ["d.importador_nit = '1020269020'"];
+  if (base.where) conditions.push(base.where.replace(/^WHERE\s+/, ''));
+
+  const [{ rows }, { vigente_desde, tarifas }, tc] = await Promise.all([
+    pool.query(`
+      SELECT d.dim_dam, d.proveedor, d.pais_procedencia, d.incoterm, d.fecha,
+        d.cantidad_m3 AS volumen,
+        y.nro_proforma, y.premio, y.flete, y.precio_unitario
+      FROM detalles d
+      LEFT JOIN ypfb_proformas y ON y.dim_dam = d.dim_dam
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY d.proveedor, d.pais_procedencia, d.fecha
+    `, base.values),
+    getTarifasActuales(),
+    getTipoCambioHoy(),
+  ]);
+
   return {
     diesel_ypfb: rows.map((r) => ({
       dim_dam: r.dim_dam,
@@ -449,6 +450,9 @@ export async function getDieselYpfb(query) {
       flete: r.flete != null ? Number(r.flete) : null,
       precio_unitario: r.precio_unitario != null ? Number(r.precio_unitario) : null,
     })),
+    tarifas,
+    tc,
+    vigente_desde,
   };
 }
 
