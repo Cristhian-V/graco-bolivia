@@ -2,7 +2,7 @@
 
 ### Requirement: Comparación de precio unitario por proveedor (Diésel YPFB)
 
-El sistema SHALL presentar, después de la tabla de tarifa de flete por tramo en Bs/m³, una sección de comparación de diésel de YPFB por proveedor cuyas columnas son Proveedor, N.º proforma, Volumen (m³), Premio (USD/m³), Flete (USD/m³) y Precio unitario (USD/m³), agrupadas por proveedor con sub-filas por `pais_procedencia`, con una fila final de promedio YPFB ponderado por volumen. La sección SHALL ofrecer filtros de Incoterm, Suministro (país de procedencia), mes y año, y SHALL ordenar los proveedores del precio unitario más bajo al más alto. Los valores SHALL ser el promedio ponderado por volumen. La sección SHALL limitarse a registros de YPFB (NIT `1020269020`) y producto `DIESEL`. El número de proforma SHALL mostrarse como enlace para descargar la factura `CM-003` cuando exista el documento con archivo; si no existe o no tiene archivo, SHALL mostrarse como texto. Si no hay `nro_proforma` guardado y existe un `CM-003`, SHALL usarse el número del `CM-003`.
+El sistema SHALL presentar, después de la tabla de tarifa de flete por tramo en Bs/m³, una sección de comparación de YPFB por proveedor para el producto seleccionado (diésel o gasolina 90) cuyas columnas son Proveedor, N.º proforma, Volumen (m³), Premio (USD/m³), Flete (USD/m³) y Precio unitario (USD/m³), agrupadas por proveedor con sub-filas por `pais_procedencia`, con una fila final de promedio YPFB ponderado por volumen. La sección SHALL ofrecer filtros de Incoterm, Suministro (país de procedencia), mes y año, y SHALL ordenar los proveedores del precio unitario más bajo al más alto. Los valores SHALL ser el promedio ponderado por volumen. La sección SHALL limitarse a registros de YPFB (NIT `1020269020`) y al producto seleccionado (`DIESEL` o `GASOLINA`); el título de la sección y de la tarjeta SHALL indicar el producto. El número de proforma SHALL mostrarse como enlace para descargar la factura `CM-003` cuando exista el documento con archivo; si no existe o no tiene archivo, SHALL mostrarse como texto. Si no hay `nro_proforma` guardado y existe un `CM-003`, SHALL usarse el número del `CM-003`.
 
 Además, el sistema SHALL:
 
@@ -18,6 +18,10 @@ Además, el sistema SHALL:
 #### Scenario: Estructura de la comparación
 - **WHEN** se muestra la sección
 - **THEN** las filas son los proveedores de YPFB del período, con sub-filas por país de procedencia y las columnas Proveedor, N.º proforma, Volumen, Premio, Flete y Precio unitario
+
+#### Scenario: Producto seleccionado
+- **WHEN** el usuario alterna entre Diésel y Gasolina 90
+- **THEN** la sección muestra los registros del producto seleccionado y el título indica Diésel YPFB o Gasolina YPFB
 
 #### Scenario: Proforma completada desde la factura comercial
 - **WHEN** un registro de YPFB no tiene `nro_proforma` y existe una factura comercial `CM-003` asociada

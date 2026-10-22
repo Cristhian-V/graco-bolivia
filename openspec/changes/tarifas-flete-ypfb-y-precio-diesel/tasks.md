@@ -49,3 +49,7 @@
 - [x] 8.2 Validar en `/combustibles/:id/documentos/:docId/archivo` que el documento pertenezca al combustible; verificar 404 con un id incorrecto y 302/200 con el correcto
 - [x] 8.3 Renderizar los números de proforma como enlaces en una pestaña nueva y como texto si no hay archivo; verificar en la UI
 - [x] 8.4 Ejecutar `openspec validate` y `npm run build`; verificar que ambos terminan sin errores
+
+## 9. Producto seleccionado
+
+- [x] 9.1 Hacer que `getDieselYpfb` use el producto de la pestaña y que el título de la sección/tarjeta cambie entre Diésel YPFB y Gasolina YPFB; verificar que la API devuelva 24 registros de diésel (TRAFIGURA) y 12 de gasolina (VITOL), y que los demás gráficos sigan cambiando

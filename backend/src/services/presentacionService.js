@@ -419,13 +419,13 @@ export async function getVolumenFrontera(query) {
 // ==================== DIÉSEL YPFB (comparación por proveedor) ====================
 
 export async function getDieselYpfb(query) {
-  const base = buildWhere({ ...query, producto: 'DIESEL' });
+  const base = buildWhere({ ...query, producto: query.producto || 'DIESEL' });
   const conditions = ["d.importador_nit = '1020269020'"];
   if (base.where) conditions.push(base.where.replace(/^WHERE\s+/, ''));
 
   const [{ rows }, { vigente_desde, tarifas }, tc] = await Promise.all([
     pool.query(`
-      SELECT d.dim_dam, d.proveedor, d.pais_procedencia, d.incoterm, d.fecha,
+      SELECT d.dim_dam, d.proveedor, d.pais_procedencia, d.incoterm, d.fecha, d.producto,
         d.cantidad_m3 AS volumen,
         COALESCE(NULLIF(y.nro_proforma, ''),
           NULLIF(trim(regexp_replace(regexp_replace(doc.num, '^#\\s*', ''), '\\s+YPFB\\s*$', '', 'i')), '')
@@ -452,6 +452,7 @@ export async function getDieselYpfb(query) {
   return {
     diesel_ypfb: rows.map((r) => ({
       dim_dam: r.dim_dam,
+      producto: r.producto,
       proveedor: r.proveedor,
       pais_procedencia: r.pais_procedencia,
       incoterm: r.incoterm,

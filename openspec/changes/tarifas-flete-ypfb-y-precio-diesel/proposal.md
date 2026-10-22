@@ -9,7 +9,7 @@ YPFB actualiza periódicamente las tarifas flete PAC-711 que aplica con sus prov
 - **Versionado por vigencia**: cada carga crea una versión con `vigente_desde` (fecha editable, por defecto el día de la carga). La ruta conserva su historial de tarifas.
 - Actualización de montos de las rutas existentes y alta de las rutas nuevas; las rutas que no aparecen en el Excel cargado se marcan como inactivas para esa versión.
 - Acceso: `admin` carga y actualiza; `presentacion` solo lectura.
-- Adecuación del gráfico **Diésel YPFB · Comparación de precio unitario por proveedor (USD/m³)** al modelo `diesel_ypfb_precio_flete.html`:
+- Adecuación del gráfico **Diésel/Gasolina YPFB · Comparación de precio unitario por proveedor (USD/m³)** al modelo `diesel_ypfb_precio_flete.html`, mostrando el producto seleccionado en la pestaña y cambiando el título de la sección:
   - selector de tramo por país alimentado por las tarifas cargadas;
   - tipo de cambio del día desde `tipo_cambio`, editable;
   - para DAP/DPU, flete = tarifa Bs/m³ ÷ TC; para FCA y países con tarifas sin tramo se mantiene el flete de la proforma; los países sin tarifas usan 0;

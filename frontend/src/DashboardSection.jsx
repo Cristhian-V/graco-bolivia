@@ -1607,7 +1607,7 @@ function YpfbComparacion({ tab, options }) {
 
   return (
     <CardFrame
-      title="Diésel YPFB · Comparación de precio unitario por proveedor (USD/m³)"
+      title={`${tab === 'diesel' ? 'Diésel' : 'Gasolina'} YPFB · Comparación de precio unitario por proveedor (USD/m³)`}
       open={open}
       onToggle={() => setOpen((o) => !o)}
       active={hasActiveFilters(filters)}
@@ -1816,7 +1816,7 @@ export default function DashboardSection({ canWrite }) {
         ))}
       </div>
 
-      <div className="dash-st">Diésel YPFB</div>
+      <div className="dash-st">{tab === 'diesel' ? 'Diésel YPFB' : 'Gasolina YPFB'}</div>
       <YpfbComparacion tab={tab} options={options} />
 
       <div className="dash-st">Volumen por Frontera</div>

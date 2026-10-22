@@ -100,6 +100,10 @@ Se agrega `db/init/015_tarifas_flete_ypfb.sql`, idempotente, con la tabla y sus 
 
 Alternativa considerada: un endpoint nuevo `/documentos/:docId/archivo`; se descarta para reutilizar el existente y su allowlist para `presentacion`.
 
+### 11. Producto seleccionado
+
+La comparación usa el producto de la pestaña (`DIESEL`/`GASOLINA`) a través de `query.producto`; el título de la sección y de la tarjeta se construye con `tab`. Las tarifas flete por tramo son las mismas para ambos productos. Si no se envía producto, se mantiene `DIESEL` como valor por defecto.
+
 ## Risks / Trade-offs
 
 - **Poca data de premio/flete (1 de 24 registros)** → el gráfico mostrará promedios basados en pocos registros y muchos “sin precio”. Mitigación: aviso explícito, vista de desglose y la carga de premio/flete sigue por la edición existente.
@@ -111,6 +115,7 @@ Alternativa considerada: un endpoint nuevo `/documentos/:docId/archivo`; se desc
 - **Allowlist de lectura** → ampliar `lecturaPermitida` es sensible. Se limita a GET y los POST siguen exigiendo `admin`.
 - **Encabezados del Excel con variantes** → se normalizan, pero un cambio de estructura puede fallar. Mitigación: validación explícita de columnas y errores por fila.
 - **Documentos CM-003 con URL externa de SUMA** → el endpoint redirige a SUMA; si SUMA exige sesión, la descarga puede fallar. Mitigación: se reutiliza el mismo endpoint que ya usa Combustibles y se muestra el número como texto si no hay archivo.
+- **Gasolina sin premio/flete cargados** → el gráfico mostrará “sin precio” hasta que se ingresen; es el comportamiento esperado y confirmado por el usuario.
 
 ## Migration Plan
 
